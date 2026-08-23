@@ -1,0 +1,207 @@
+{
+  "studyVersion" : 0,
+  "study" : {
+    "protocolSection" : {
+      "identificationModule" : {
+        "nctId" : "NCT02872116",
+        "orgStudyIdInfo" : {
+          "id" : "CA209-649"
+        },
+        "secondaryIdInfos" : [ {
+          "id" : "2016-001018-76",
+          "type" : "EUDRACT_NUMBER"
+        } ],
+        "organization" : {
+          "fullName" : "Bristol-Myers Squibb",
+          "class" : "INDUSTRY"
+        },
+        "briefTitle" : "Efficacy Study of Nivolumab Plus Ipilimumab Against Chemotherapy Standard of Care in Stomach Cancer or Stomach&#x2F;Esophagus Junction Cancer",
+        "officialTitle" : "A Randomized, Multicenter, Open-Label, Phase 3 Study of Nivolumab Plus Ipilimumab Versus Oxaliplatin Plus Fluoropyrimidine in Subjects With Previously Untreated Advanced or Metastatic Gastric or Gastroesophageal Junction Cancer",
+        "acronym" : "CheckMate649"
+      },
+      "statusModule" : {
+        "statusVerifiedDate" : "2016-08",
+        "overallStatus" : "NOT_YET_RECRUITING",
+        "expandedAccessInfo" : {
+          "hasExpandedAccess" : false
+        },
+        "startDateStruct" : {
+          "date" : "2016-09"
+        },
+        "primaryCompletionDateStruct" : {
+          "date" : "2019-03",
+          "type" : "ESTIMATED"
+        },
+        "completionDateStruct" : {
+          "date" : "2020-09",
+          "type" : "ESTIMATED"
+        },
+        "studyFirstSubmitDate" : "2016-08-16",
+        "studyFirstSubmitQcDate" : "2016-08-18",
+        "studyFirstPostDateStruct" : {
+          "date" : "2016-08-19",
+          "type" : "ESTIMATED"
+        },
+        "dispFirstSubmitDate" : "2021-05-26",
+        "lastUpdateSubmitDate" : "2016-08-18",
+        "lastUpdatePostDateStruct" : {
+          "date" : "2016-08-19",
+          "type" : "ESTIMATED"
+        }
+      },
+      "sponsorCollaboratorsModule" : {
+        "responsibleParty" : {
+          "type" : "SPONSOR"
+        },
+        "leadSponsor" : {
+          "name" : "Bristol-Myers Squibb",
+          "class" : "INDUSTRY"
+        },
+        "collaborators" : [ {
+          "name" : "Ono Pharmaceutical Co., Ltd.",
+          "class" : "INDUSTRY"
+        } ]
+      },
+      "oversightModule" : {
+        "oversightHasDmc" : true
+      },
+      "descriptionModule" : {
+        "briefSummary" : "The main purpose of this study is to compare how long subjects with gastric or gastroesophageal junction cancer live after receiving nivolumab and ipilimumab compared with patients receiving chemotherapy standard of care, oxaliplatin plus fluoropyrimidine."
+      },
+      "conditionsModule" : {
+        "conditions" : [ "Gastric Cancer", "Gastroesophageal Junction Cancer" ]
+      },
+      "designModule" : {
+        "studyType" : "INTERVENTIONAL",
+        "phases" : [ "PHASE3" ],
+        "designInfo" : {
+          "allocation" : "RANDOMIZED",
+          "interventionModel" : "PARALLEL",
+          "primaryPurpose" : "TREATMENT",
+          "maskingInfo" : {
+            "masking" : "NONE"
+          }
+        },
+        "enrollmentInfo" : {
+          "count" : 750,
+          "type" : "ESTIMATED"
+        }
+      },
+      "armsInterventionsModule" : {
+        "armGroups" : [ {
+          "label" : "Nivolumab + Ipilimumab",
+          "type" : "EXPERIMENTAL",
+          "description" : "Nivolumab + Ipilimumab for 4 doses, followed by Nivolumab monotherapy",
+          "interventionNames" : [ "Drug: Nivolumab", "Drug: Ipilimumab" ]
+        }, {
+          "label" : "XELOX (Oxaliplatin + Capecitabine)",
+          "type" : "ACTIVE_COMPARATOR",
+          "interventionNames" : [ "Drug: Oxaliplatin", "Drug: Capecitabine" ]
+        }, {
+          "label" : "FOLFOX (Oxaliplatin + Leucovorin + Fluorouracil)",
+          "type" : "ACTIVE_COMPARATOR",
+          "interventionNames" : [ "Drug: Oxaliplatin", "Drug: Leucovorin", "Drug: Fluorouracil" ]
+        } ],
+        "interventions" : [ {
+          "type" : "DRUG",
+          "name" : "Nivolumab",
+          "description" : "Specified dose on specified days",
+          "armGroupLabels" : [ "Nivolumab + Ipilimumab" ],
+          "otherNames" : [ "Opdivo", "BMS-936558" ]
+        }, {
+          "type" : "DRUG",
+          "name" : "Ipilimumab",
+          "description" : "Specified dose on specified days",
+          "armGroupLabels" : [ "Nivolumab + Ipilimumab" ],
+          "otherNames" : [ "Yervoy", "BMS-734016" ]
+        }, {
+          "type" : "DRUG",
+          "name" : "Oxaliplatin",
+          "description" : "Specified dose on specified days",
+          "armGroupLabels" : [ "FOLFOX (Oxaliplatin + Leucovorin + Fluorouracil)", "XELOX (Oxaliplatin + Capecitabine)" ]
+        }, {
+          "type" : "DRUG",
+          "name" : "Capecitabine",
+          "description" : "Specified dose on specified days",
+          "armGroupLabels" : [ "XELOX (Oxaliplatin + Capecitabine)" ]
+        }, {
+          "type" : "DRUG",
+          "name" : "Leucovorin",
+          "description" : "Specified dose on specified days",
+          "armGroupLabels" : [ "FOLFOX (Oxaliplatin + Leucovorin + Fluorouracil)" ]
+        }, {
+          "type" : "DRUG",
+          "name" : "Fluorouracil",
+          "description" : "Specified dose on specified days",
+          "armGroupLabels" : [ "FOLFOX (Oxaliplatin + Leucovorin + Fluorouracil)" ]
+        } ]
+      },
+      "outcomesModule" : {
+        "primaryOutcomes" : [ {
+          "measure" : "Overall survival (OS) of nivolumab + ipilimumab versus oxaliplatin + fluoropyrimidine in subjects with programmed cell death ligand 1 (PD-L1) expressing tumors",
+          "timeFrame" : "Approximately 35 months after the first patient is randomized"
+        } ],
+        "secondaryOutcomes" : [ {
+          "measure" : "OS of nivolumab + ipilimumab versus oxaliplatin + fluoropyrimidine in all randomized subjects",
+          "timeFrame" : "Approximately 35 months after the first patient is randomized"
+        }, {
+          "measure" : "Progression-free Survival (PFS) of nivolumab + ipilimumab versus oxaliplatin + fluoropyrimidine in subjects with PD-L1 expressing tumors and all randomized subjects",
+          "timeFrame" : "Approximately 35 months after the first patient is randomized"
+        }, {
+          "measure" : "Time to Symptom Deterioration (TTSD) assessed with Gastric Cancer Subscale (GaCS) questionnaire in subjects with PD-L1 expressing tumors and all randomized subjects",
+          "timeFrame" : "Approximately 35 months after the first patient is randomized"
+        } ]
+      },
+      "eligibilityModule" : {
+        "eligibilityCriteria" : "<p>For more information regarding Bristol-Myers Squibb Clinical Trial participation, please visit www.BMSStudyConnect.com</p><p>Inclusion Criteria:</p><ul><li>Male or Female at least 18 years of age</li><li>Must have gastric cancer or gastroesophageal junction cancer that cannot be operated on and that is advanced or has spread out</li><li>Did not receive neoadjuvant or adjuvant treatment (chemotherapy, radiotherapy, or both) for their disease within the last 6 months</li><li>Must have full activity or, if limited, must be able to walk and carry out light activities such as light house work or office work</li><li>Must agree to provide tumor tissue sample, either from a previous surgery or biopsy within 6 months or fresh, prior to the start of treatment in this study</li></ul><p>Exclusion Criteria:</p><ul><li>Presence of tumor cells in the brain or spinal cord that have not been treated</li><li>Active known or suspected autoimmune disease</li><li>Any serious or uncontrolled medical disorder or active infection</li><li>Known history of positive test for human immunodeficiency virus (HIV) or known acquired immunodeficiency syndrome (AIDS)</li><li>Any positive test result for hepatitis B or C indicating acute or chronic infection</li></ul><p>Other protocol defined inclusion&#x2F;exclusion criteria could apply</p>",
+        "healthyVolunteers" : false,
+        "sex" : "ALL",
+        "minimumAge" : "18 Years",
+        "stdAges" : [ "ADULT", "OLDER_ADULT" ]
+      },
+      "contactsLocationsModule" : {
+        "centralContacts" : [ {
+          "name" : "Recruiting sites have contact information. Please contact the sites directly. If there is no contact information, please email:",
+          "role" : "CONTACT",
+          "email" : "Clinical.Trials@bms.com"
+        }, {
+          "name" : "First line of the email MUST contain NCT # and Site #.",
+          "role" : "CONTACT"
+        } ],
+        "overallOfficials" : [ {
+          "name" : "Bristol-Myers Squibb",
+          "affiliation" : "Bristol-Myers Squibb",
+          "role" : "STUDY_DIRECTOR"
+        } ]
+      },
+      "referencesModule" : {
+        "references" : [ {
+          "pmid" : "40632415",
+          "type" : "DERIVED",
+          "citation" : "Lin D, Quan W, Garretson M, Chirikov V, Chen C, Singh P, Davis C, Sugarman R. Q-TWiST analysis of first-line nivolumab plus chemotherapy versus chemotherapy in patients with advanced gastric cancer, gastroesophageal junction cancer, or esophageal adenocarcinoma from CheckMate 649: 4-year follow-up results. Gastric Cancer. 2025 Sep;28(5):935-944. doi: 10.1007&#x2F;s10120-025-01634-6. Epub 2025 Jul 9."
+        }, {
+          "pmid" : "38382001",
+          "type" : "DERIVED",
+          "citation" : "Janjigian YY, Ajani JA, Moehler M, Shen L, Garrido M, Gallardo C, Wyrwicz L, Yamaguchi K, Cleary JM, Elimova E, Karamouzis M, Bruges R, Skoczylas T, Bragagnoli A, Liu T, Tehfe M, Zander T, Kowalyszyn R, Pazo-Cid R, Schenker M, Feeny K, Wang R, Lei M, Chen C, Nathani R, Shitara K. First-Line Nivolumab Plus Chemotherapy for Advanced Gastric, Gastroesophageal Junction, and Esophageal Adenocarcinoma: 3-Year Follow-Up of the Phase III CheckMate 649 Trial. J Clin Oncol. 2024 Jun 10;42(17):2012-2020. doi: 10.1200&#x2F;JCO.23.01601. Epub 2024 Feb 21."
+        }, {
+          "pmid" : "37713657",
+          "type" : "DERIVED",
+          "citation" : "Moehler M, Xiao H, Blum SI, Elimova E, Cella D, Shitara K, Ajani JA, Janjigian YY, Garrido M, Shen L, Yamaguchi K, Liu T, Schenker M, Kowalyszyn R, Bragagnoli AC, Bruges R, Montesarchio V, Pazo-Cid R, Hunter S, Davenport E, Wang J, Kondo K, Li M, Wyrwicz L. Health-Related Quality of Life With Nivolumab Plus Chemotherapy Versus Chemotherapy in Patients With Advanced Gastric&#x2F;Gastroesophageal Junction Cancer or Esophageal Adenocarcinoma From CheckMate 649. J Clin Oncol. 2023 Dec 10;41(35):5388-5399. doi: 10.1200&#x2F;JCO.23.00170. Epub 2023 Sep 15."
+        }, {
+          "pmid" : "36919706",
+          "type" : "DERIVED",
+          "citation" : "Janjigian YY, Shitara K, Moehler M, Garrido M, Salman P, Wyrwicz L, Yamaguchi K, Skoczylas T, Bragagnoli AC, Liu T, Schenker M, Yanez P, Tehfe M, Kowalyszyn R, Karamouzis MV, Bruges R, Zander T, Pazo-Cid R, Hitre E, Feeney K, Cleary JM, Poulart V, Cullen D, Lei M, Xiao H, Kondo K, Li M, Ajani JA. A plain language summary of the CheckMate 649 study: nivolumab in combination with chemotherapy compared to chemotherapy alone for untreated advanced or metastatic cancer of the stomach or esophagus. Future Oncol. 2023 Apr;19(11):739-752. doi: 10.2217&#x2F;fon-2022-1149. Epub 2023 Mar 15."
+        }, {
+          "pmid" : "36121651",
+          "type" : "DERIVED",
+          "citation" : "Liu T, Bai Y, Lin X, Li W, Wang J, Zhang X, Pan H, Bai C, Bai L, Cheng Y, Zhang J, Zhong H, Ba Y, Hu W, Xu R, Guo W, Qin S, Yang N, Lu J, Shitara K, Lei M, Li M, Bao N, Chen T, Shen L. First-line nivolumab plus chemotherapy vs chemotherapy in patients with advanced gastric, gastroesophageal junction and esophageal adenocarcinoma: CheckMate 649 Chinese subgroup analysis. Int J Cancer. 2023 Feb 15;152(4):749-760. doi: 10.1002&#x2F;ijc.34296. Epub 2022 Oct 31."
+        }, {
+          "pmid" : "34102137",
+          "type" : "DERIVED",
+          "citation" : "Janjigian YY, Shitara K, Moehler M, Garrido M, Salman P, Shen L, Wyrwicz L, Yamaguchi K, Skoczylas T, Campos Bragagnoli A, Liu T, Schenker M, Yanez P, Tehfe M, Kowalyszyn R, Karamouzis MV, Bruges R, Zander T, Pazo-Cid R, Hitre E, Feeney K, Cleary JM, Poulart V, Cullen D, Lei M, Xiao H, Kondo K, Li M, Ajani JA. First-line nivolumab plus chemotherapy versus chemotherapy alone for advanced gastric, gastro-oesophageal junction, and oesophageal adenocarcinoma (CheckMate 649): a randomised, open-label, phase 3 trial. Lancet. 2021 Jul 3;398(10294):27-40. doi: 10.1016&#x2F;S0140-6736(21)00797-2. Epub 2021 Jun 5."
+        } ]
+      }
+    },
+    "hasResults" : false
+  }
+}
