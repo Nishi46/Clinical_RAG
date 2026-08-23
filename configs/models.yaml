@@ -1,0 +1,38 @@
+# Pinned model digests. Ollama tags (e.g. "latest") get republished silently;
+# the digest is the actual reproducibility guarantee (sprint_plan.md appendix).
+# Re-verify with `ollama list` / `ollama show <name>` before any full eval run --
+# if the digest for a tag has changed, note it and decide whether to re-pin or
+# pull the old digest explicitly.
+
+generation:
+  name: llama3.1:latest
+  digest: sha256:46e0c10c039e019119339687c3c1757cc81b9da49709a3b3924863ba87ca666e
+  parameters: 8.0B
+  quantization: Q4_K_M
+  context_length: 131072
+  confirmed: 2026-08-22
+  note: already present locally at Sprint 0 setup time; matches the plan's "8B Q4" target exactly.
+
+judge:
+  name: llama3.1:latest
+  digest: sha256:46e0c10c039e019119339687c3c1757cc81b9da49709a3b3924863ba87ca666e
+  note: >
+    Same model as generation for now, per sprint_plan.md ("Free and keeps judge
+    capability constant"). Re-evaluate after S3-08 judge calibration (Cohen's kappa) --
+    swap to a different local model here only if calibration fails and a change is
+    deliberate, not by drifting the tag.
+
+embeddings:
+  # Not yet selected -- S3-01 will pick a specific sentence-transformers model
+  # (not an Ollama model; the plan calls for the sentence-transformers library
+  # directly, embedded in the ingestion/retrieval code, not served via Ollama).
+  # Note: an Ollama embedding model (mxbai-embed-large, digest 468836162de7) is
+  # already pulled locally but is NOT the plan's choice -- do not use it by
+  # default; it's listed here only so its presence isn't mistaken for the pick.
+  name: null
+  digest: null
+
+reranker:
+  # bge-reranker-v2-m3 per sprint_plan.md -- not yet pulled/pinned as of Sprint 0.
+  name: null
+  digest: null
