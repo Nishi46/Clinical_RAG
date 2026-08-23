@@ -1,5 +1,7 @@
 import json
 import random
+import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +16,7 @@ from protocol_drift.registry.cohort import (
     has_required_doc,
     select_cohort,
     stratification_summary,
+    write_candidates_cache,
     write_cohort_manifest,
 )
 
@@ -199,3 +202,75 @@ def test_fetch_candidates_filters_to_doc_having_trials() -> None:
     candidates = fetch_candidates(client)
 
     assert [c["nct_id"] for c in candidates] == ["NCT00000001"]
+
+
+def test_cohort_cli_end_to_end_determinism(tmp_path: Path) -> None:
+    """Invokes the real `python -m protocol_drift.registry.cohort --use-cached`
+    entrypoint as two separate subprocesses against the same cached candidate
+    file, then diffs the two data/cohort.json-equivalent outputs byte-for-byte.
+    This exercises argparse + main() + a fresh interpreter each time -- an
+    in-process call to select_cohort() alone wouldn't catch a bug introduced
+    in main()'s own wiring (e.g. an argument default reintroducing
+    wall-clock-dependent behavior)."""
+    pool = _synthetic_pool(400, sponsors_per_class=50)
+    candidates_cache = tmp_path / "candidates_raw.json"
+    write_candidates_cache(pool, candidates_cache)
+
+    out1 = tmp_path / "cohort_run1.json"
+    out2 = tmp_path / "cohort_run2.json"
+
+    for out in (out1, out2):
+        subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "protocol_drift.registry.cohort",
+                "--use-cached",
+                "--candidates-cache",
+                str(candidates_cache),
+                "--out",
+                str(out),
+                "--target",
+                "200",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+    assert out1.read_text() == out2.read_text()
+    assert json.loads(out1.read_text())["count"] == 200
+
+
+def test_write_cohort_manifest_json_formatting_is_stable(tmp_path: Path) -> None:
+    """Golden-file-style check on the exact raw JSON text (key order via
+    sort_keys, indent=2, trailing newline) -- so a future refactor that
+    switches to insertion-order dict serialization or drops indent/sort_keys
+    fails loudly here instead of silently reintroducing non-determinism."""
+    selected = [
+        {
+            "nct_id": "NCT00000001",
+            "sponsor_name": "Acme",
+            "sponsor_class": "INDUSTRY",
+            "phase": "PHASE2",
+            "first_posted": "2018-01-01",
+        }
+    ]
+    summary = {"INDUSTRY|PHASE2": 1}
+    out = tmp_path / "cohort.json"
+
+    write_cohort_manifest(selected, summary, out)
+    text = out.read_text()
+
+    assert text.endswith("}\n")
+    assert not text.endswith("}\n\n")
+    # sort_keys=True: top-level keys appear alphabetically, not insertion order
+    top_level_keys_in_order = [
+        line.split('"')[1] for line in text.splitlines() if line.startswith('  "')
+    ]
+    assert top_level_keys_in_order == sorted(top_level_keys_in_order)
+    # indent=2: every nested line is indented by a multiple of 2 spaces
+    for line in text.splitlines():
+        stripped = line.lstrip(" ")
+        leading_spaces = len(line) - len(stripped)
+        assert leading_spaces % 2 == 0

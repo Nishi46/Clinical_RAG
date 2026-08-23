@@ -1,11 +1,15 @@
 """TraceStore tests against a real local Postgres (protocol_drift_dev).
 
 Marked `integration`: unlike db/extract.py's pure extraction functions,
-TraceStore has no meaningful behavior without a live database connection, and
-CI has no Postgres service wired up yet (that's S1-10's job, not this one's).
-Run locally: `pytest -m integration tests/trace/`.
+TraceStore has no meaningful behavior without a live database connection.
+Adding a Postgres service container to CI so these can run unmarked is a
+real, well-scoped follow-up, but not one this pass attempts -- it can't be
+verified locally the way everything else here can, and shipping unverified
+CI infrastructure is worse than leaving the gap explicit. Run locally:
+`pytest -m integration tests/trace/`.
 """
 
+import concurrent.futures
 import time
 from collections.abc import Iterator
 
@@ -106,6 +110,24 @@ def test_retrieval_step_rejects_unknown_stage(store: TraceStore) -> None:
 def test_chunk_hit_rejects_orphaned_retrieval_step_id(store: TraceStore) -> None:
     with pytest.raises(psycopg.errors.ForeignKeyViolation):
         store.log_chunk_hit(999_999_999, chunk_id="chunk-1")
+
+
+@pytest.mark.integration
+def test_retrieval_step_rejects_orphaned_query_id(store: TraceStore) -> None:
+    with pytest.raises(psycopg.errors.ForeignKeyViolation):
+        store.log_retrieval_step(999_999_999, "dense", latency_ms=1.0)
+
+
+@pytest.mark.integration
+def test_generation_rejects_orphaned_query_id(store: TraceStore) -> None:
+    with pytest.raises(psycopg.errors.ForeignKeyViolation):
+        store.log_generation(999_999_999, "sha256:abc", "deadbeef", "answer", 1.0)
+
+
+@pytest.mark.integration
+def test_cost_record_rejects_orphaned_generation_id(store: TraceStore) -> None:
+    with pytest.raises(psycopg.errors.ForeignKeyViolation):
+        store.log_cost(999_999_999, tokens_in=1, tokens_out=1, wall_clock_ms=1.0)
 
 
 @pytest.mark.integration
@@ -217,3 +239,32 @@ def test_compute_prompt_hash_deterministic() -> None:
     assert h1 == h2
     assert h1 != h3
     assert len(h1) == 64
+
+
+@pytest.mark.integration
+def test_concurrent_writes_produce_no_lost_writes(conn: psycopg.Connection) -> None:
+    """Sprint 3's eval loop will hammer this store from many workers at
+    once. Each worker here opens its own connection (a psycopg Connection
+    is not safe to share across threads) and writes concurrently; the `conn`
+    fixture is used only for baseline/cleanup bookkeeping -- once a worker
+    commits, its row is visible to every other connection, so cleanup still
+    finds everything regardless of which connection wrote it."""
+    n = 20
+
+    def _write(i: int) -> int:
+        worker_conn = psycopg.connect(DSN)
+        try:
+            return TraceStore(worker_conn).log_query(f"concurrent query {i}", tier="T1")
+        finally:
+            worker_conn.close()
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+        ids = list(executor.map(_write, range(n)))
+
+    assert len(ids) == n
+    assert len(set(ids)) == n  # every write landed with a distinct id -- none lost or collided
+
+    with conn.cursor() as cur:
+        cur.execute("SELECT count(*) FROM query WHERE text LIKE %s", ("concurrent query %",))
+        (count,) = cur.fetchone()
+    assert count == n
