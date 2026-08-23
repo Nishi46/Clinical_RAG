@@ -2,3 +2,9 @@ scratch/
 __pycache__/
 *.pyc
 .venv/
+data/
+*.egg-info/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.env
