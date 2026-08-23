@@ -1,4 +1,4 @@
-.PHONY: lint typecheck test fmt
+.PHONY: lint typecheck test fmt corpus-report
 
 lint:
 	ruff check .
@@ -12,3 +12,6 @@ test:
 fmt:
 	ruff format .
 	ruff check --fix .
+
+corpus-report:
+	python -m protocol_drift.reports.corpus_report
