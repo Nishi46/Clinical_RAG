@@ -1,4 +1,4 @@
-.PHONY: lint typecheck test fmt corpus-report
+.PHONY: lint typecheck test test-db fmt corpus-report
 
 lint:
 	ruff check .
@@ -7,7 +7,10 @@ typecheck:
 	mypy src
 
 test:
-	pytest -m "not integration"
+	pytest -m "not integration and not db"
+
+test-db:
+	pytest -m db
 
 fmt:
 	ruff format .

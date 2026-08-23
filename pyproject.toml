@@ -50,5 +50,6 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = [
-    "integration: hits live external services; excluded from default CI run",
+    "integration: hits a live external network service (e.g. clinicaltrials.gov); always excluded from CI",
+    "db: needs a live Postgres connection; excluded from the local fast-path `make test` but run in CI, which provisions one",
 ]

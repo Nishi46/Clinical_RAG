@@ -27,9 +27,10 @@ from typing import Any
 
 import psycopg
 
+from protocol_drift.db import DEFAULT_DSN
+
 DEFAULT_COHORT_PATH = Path("data/cohort.json")
 DEFAULT_SNAPSHOT_DIR = Path("data/registry_snapshots")
-DEFAULT_DSN = "dbname=protocol_drift_dev"
 
 SCHEMA_PATH = Path(__file__).parent / "schema.sql"
 

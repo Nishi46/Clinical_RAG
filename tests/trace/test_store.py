@@ -1,12 +1,12 @@
-"""TraceStore tests against a real local Postgres (protocol_drift_dev).
+"""TraceStore tests against a real Postgres (protocol_drift_dev locally, or
+whatever PROTOCOL_DRIFT_DSN points at in CI's service container).
 
-Marked `integration`: unlike db/extract.py's pure extraction functions,
-TraceStore has no meaningful behavior without a live database connection.
-Adding a Postgres service container to CI so these can run unmarked is a
-real, well-scoped follow-up, but not one this pass attempts -- it can't be
-verified locally the way everything else here can, and shipping unverified
-CI infrastructure is worse than leaving the gap explicit. Run locally:
-`pytest -m integration tests/trace/`.
+Marked `db` (not `integration` -- that marker is reserved for tests hitting
+a live external network service, which these don't): unlike db/extract.py's
+pure extraction functions, TraceStore has no meaningful behavior without a
+live database connection. Excluded from the local `make test` fast path
+(no Postgres required there); included in CI, which provisions one.
+Run locally: `make test-db` or `pytest -m db tests/trace/`.
 """
 
 import concurrent.futures
@@ -16,9 +16,9 @@ from collections.abc import Iterator
 import psycopg
 import pytest
 
+from protocol_drift.db import DEFAULT_DSN as DSN
 from protocol_drift.trace.store import TraceStore, compute_prompt_hash, traced_call
 
-DSN = "dbname=protocol_drift_dev"
 _TABLES_CHILD_TO_PARENT = ("cost_record", "generation", "chunk_hit", "retrieval_step", "query")
 
 
@@ -54,20 +54,20 @@ def store(conn: psycopg.Connection) -> TraceStore:
     return TraceStore(conn)
 
 
-@pytest.mark.integration
+@pytest.mark.db
 def test_log_query_returns_valid_id(store: TraceStore) -> None:
     query_id = store.log_query("What is the primary outcome?", tier="T1")
     assert query_id > 0
 
 
-@pytest.mark.integration
+@pytest.mark.db
 def test_log_retrieval_step_returns_valid_id(store: TraceStore) -> None:
     query_id = store.log_query("test query")
     step_id = store.log_retrieval_step(query_id, "dense", latency_ms=12.5)
     assert step_id > 0
 
 
-@pytest.mark.integration
+@pytest.mark.db
 def test_log_chunk_hit_returns_valid_id(store: TraceStore) -> None:
     query_id = store.log_query("test query")
     step_id = store.log_retrieval_step(query_id, "dense", latency_ms=12.5)
@@ -77,7 +77,7 @@ def test_log_chunk_hit_returns_valid_id(store: TraceStore) -> None:
     assert hit_id > 0
 
 
-@pytest.mark.integration
+@pytest.mark.db
 def test_log_generation_returns_valid_id(store: TraceStore) -> None:
     query_id = store.log_query("test query")
     gen_id = store.log_generation(
@@ -91,7 +91,7 @@ def test_log_generation_returns_valid_id(store: TraceStore) -> None:
     assert gen_id > 0
 
 
-@pytest.mark.integration
+@pytest.mark.db
 def test_log_cost_returns_valid_id(store: TraceStore) -> None:
     query_id = store.log_query("test query")
     gen_id = store.log_generation(query_id, "sha256:abc", "deadbeef", "answer", 500.0)
@@ -99,38 +99,38 @@ def test_log_cost_returns_valid_id(store: TraceStore) -> None:
     assert cost_id > 0
 
 
-@pytest.mark.integration
+@pytest.mark.db
 def test_retrieval_step_rejects_unknown_stage(store: TraceStore) -> None:
     query_id = store.log_query("test query")
     with pytest.raises(psycopg.errors.CheckViolation):
         store.log_retrieval_step(query_id, "not_a_real_stage", latency_ms=1.0)
 
 
-@pytest.mark.integration
+@pytest.mark.db
 def test_chunk_hit_rejects_orphaned_retrieval_step_id(store: TraceStore) -> None:
     with pytest.raises(psycopg.errors.ForeignKeyViolation):
         store.log_chunk_hit(999_999_999, chunk_id="chunk-1")
 
 
-@pytest.mark.integration
+@pytest.mark.db
 def test_retrieval_step_rejects_orphaned_query_id(store: TraceStore) -> None:
     with pytest.raises(psycopg.errors.ForeignKeyViolation):
         store.log_retrieval_step(999_999_999, "dense", latency_ms=1.0)
 
 
-@pytest.mark.integration
+@pytest.mark.db
 def test_generation_rejects_orphaned_query_id(store: TraceStore) -> None:
     with pytest.raises(psycopg.errors.ForeignKeyViolation):
         store.log_generation(999_999_999, "sha256:abc", "deadbeef", "answer", 1.0)
 
 
-@pytest.mark.integration
+@pytest.mark.db
 def test_cost_record_rejects_orphaned_generation_id(store: TraceStore) -> None:
     with pytest.raises(psycopg.errors.ForeignKeyViolation):
         store.log_cost(999_999_999, tokens_in=1, tokens_out=1, wall_clock_ms=1.0)
 
 
-@pytest.mark.integration
+@pytest.mark.db
 def test_end_to_end_chain_joins_correctly(store: TraceStore, conn: psycopg.Connection) -> None:
     query_id = store.log_query("full chain test", tier="T2")
     step_id = store.log_retrieval_step(query_id, "rerank", latency_ms=8.0)
@@ -172,7 +172,7 @@ def test_end_to_end_chain_joins_correctly(store: TraceStore, conn: psycopg.Conne
     assert row == ("full chain test", "rerank", "chunk-42", "the answer", 80)
 
 
-@pytest.mark.integration
+@pytest.mark.db
 def test_traced_call_logs_step_and_hits_and_measures_latency(
     store: TraceStore, conn: psycopg.Connection
 ) -> None:
@@ -201,7 +201,7 @@ def test_traced_call_logs_step_and_hits_and_measures_latency(
     assert hit_count == 2
 
 
-@pytest.mark.integration
+@pytest.mark.db
 def test_traced_call_logs_step_even_with_no_hits(
     store: TraceStore, conn: psycopg.Connection
 ) -> None:
@@ -216,7 +216,7 @@ def test_traced_call_logs_step_even_with_no_hits(
     assert count == 1
 
 
-@pytest.mark.integration
+@pytest.mark.db
 def test_traced_call_logs_step_even_on_exception(
     store: TraceStore, conn: psycopg.Connection
 ) -> None:
@@ -241,7 +241,7 @@ def test_compute_prompt_hash_deterministic() -> None:
     assert len(h1) == 64
 
 
-@pytest.mark.integration
+@pytest.mark.db
 def test_concurrent_writes_produce_no_lost_writes(conn: psycopg.Connection) -> None:
     """Sprint 3's eval loop will hammer this store from many workers at
     once. Each worker here opens its own connection (a psycopg Connection
