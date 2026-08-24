@@ -48,10 +48,14 @@ Two other Sprint 0/1 findings shape scope here and are referenced throughout:
    black rectangles (`page.get_drawings()`, filter to solid fills covering >5% of page area) is
    marked `has_redaction=True` on the page record. This is detection only — confirmed present at
    least once in `corpus_assessment.md` §6/§8; don't attempt redaction *reconstruction*.
-5. Write extracted output to `data/extracted/{nct_id}/{doc_type}.json`: ordered list of pages, each
-   with blocks (text + bbox), page class, `needs_ocr`, `has_redaction`. Skip re-extraction if the
-   destination file exists and matches the source PDF's SHA-256 from the pdf manifest, unless
-   `--force` — same resumability contract as S1-04/S1-06.
+5. Write extracted output to `data/extracted/{nct_id}/{doc_type[_N]}.json`: ordered list of pages,
+   each with blocks (text + bbox), page class, `needs_ocr`, `has_redaction`. The `_N` suffix mirrors
+   S1-06's download naming and matters in practice — a handful of trials have more than one document
+   of the same `doc_type` (confirmed: `NCT03083873` has 4 protocol PDFs, `NCT03043313` has 2 SAP
+   PDFs, amendment resubmissions filed under the same category), and a bare `{doc_type}.json` path
+   would silently overwrite one with another. Skip re-extraction if the destination file exists and
+   matches the source PDF's SHA-256 from the pdf manifest, unless `--force` — same resumability
+   contract as S1-04/S1-06.
 6. Implement `extract_corpus(...) -> ExtractionReport` iterating every non-ICF document in the
    cohort; log failures (corrupt PDF, e.g. the known `NCT03081858` SAP xref issue from S1-07) to
    `data/extracted/extraction_errors.log` instead of aborting.
