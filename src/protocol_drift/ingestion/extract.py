@@ -25,6 +25,8 @@ from typing import Any
 
 import fitz  # pymupdf
 
+from protocol_drift.ingestion.ocr import ocr_page
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_PDF_MANIFEST = Path("data/pdfs/manifest.json")
@@ -129,24 +131,36 @@ def _extract_block(raw_block: dict[str, Any]) -> dict[str, Any] | None:
     }
 
 
-def extract_page(page: fitz.Page, page_class: str) -> dict[str, Any]:
+def extract_page(page: fitz.Page, page_class: str, with_ocr: bool = False) -> dict[str, Any]:
     """Layout-aware extraction of one page, respecting S1-07's classification.
 
     A SCANNED page is never sent through get_text() -- it has no real text
     layer, so anything extracted would be empty or garbled rather than
-    content. Only BORN_DIGITAL / BLANK_OR_VECTOR pages are extracted.
+    content. By default it's left empty (needs_ocr=True, blocks=[]) per
+    S2-03's scoped-down default (skip + report, given the corpus's measured
+    2.69% page-level scanned rate). Only when with_ocr=True is a scanned
+    page actually sent through Tesseract -- a one-time spot-check path, not
+    the default pipeline behavior.
     """
     if page_class == "scanned":
+        blocks: list[dict[str, Any]] = []
+        ocr_applied = False
+        if with_ocr:
+            text = ocr_page(page).strip()
+            if text:
+                blocks = [{"bbox": list(page.rect), "text": text, "font_size": 0.0, "bold": False}]
+            ocr_applied = True
         return {
             "page_number": page.number,
             "page_class": page_class,
             "needs_ocr": True,
             "has_redaction": False,
-            "blocks": [],
+            "blocks": blocks,
+            "ocr_applied": ocr_applied,
         }
 
     raw = page.get_text("dict", sort=True)
-    blocks: list[dict[str, Any]] = []
+    blocks = []
     for raw_block in raw["blocks"]:
         block = _extract_block(raw_block)
         if block is not None:
@@ -160,17 +174,22 @@ def extract_page(page: fitz.Page, page_class: str) -> dict[str, Any]:
         "needs_ocr": False,
         "has_redaction": has_redaction,
         "blocks": blocks,
+        "ocr_applied": False,
     }
 
 
-def extract_document(pdf_path: Path, page_classes: list[str]) -> dict[str, Any]:
+def extract_document(
+    pdf_path: Path, page_classes: list[str], with_ocr: bool = False
+) -> dict[str, Any]:
     doc = fitz.open(pdf_path)
     try:
         if doc.page_count != len(page_classes):
             raise ValueError(
                 f"{pdf_path}: page count {doc.page_count} != {len(page_classes)} classified pages"
             )
-        pages = [extract_page(doc[i], page_classes[i]) for i in range(doc.page_count)]
+        pages = [
+            extract_page(doc[i], page_classes[i], with_ocr=with_ocr) for i in range(doc.page_count)
+        ]
     finally:
         doc.close()
     return {"total_pages": len(pages), "pages": pages}
@@ -198,6 +217,7 @@ def extract_corpus(
     classification_path: Path = DEFAULT_CLASSIFICATION_PATH,
     dest_dir: Path = DEFAULT_DEST_DIR,
     force: bool = False,
+    with_ocr: bool = False,
 ) -> dict[str, Any]:
     entries = document_pdfs(pdf_manifest_path, classification_path)
 
@@ -211,12 +231,18 @@ def extract_corpus(
 
         if not force and dest_path.exists():
             existing = json.loads(dest_path.read_text())
-            if existing.get("source_sha256") == source_sha256:
+            # with_ocr must also match the cached run -- otherwise a stale
+            # cache from a plain extraction would silently look "resumed"
+            # even though a scanned page never actually went through OCR.
+            if (
+                existing.get("source_sha256") == source_sha256
+                and existing.get("with_ocr", False) == with_ocr
+            ):
                 skipped += 1
                 continue
 
         try:
-            content = extract_document(pdf_path, entry["page_classes"])
+            content = extract_document(pdf_path, entry["page_classes"], with_ocr=with_ocr)
         except (fitz.mupdf.FzErrorBase, RuntimeError, IndexError, ValueError) as exc:
             # Same malformed-PDF failure modes S1-07 already saw (e.g.
             # NCT03081858's broken xref table) -- log and keep going rather
@@ -230,6 +256,7 @@ def extract_corpus(
             "doc_type": entry["doc_type"],
             "source_path": str(pdf_path),
             "source_sha256": source_sha256,
+            "with_ocr": with_ocr,
             **content,
         }
         dest_path.write_text(json.dumps(payload, indent=2) + "\n")
@@ -261,6 +288,12 @@ def main() -> None:
     parser.add_argument("--classification", type=Path, default=DEFAULT_CLASSIFICATION_PATH)
     parser.add_argument("--dest", type=Path, default=DEFAULT_DEST_DIR)
     parser.add_argument("--force", action="store_true")
+    parser.add_argument(
+        "--with-ocr",
+        action="store_true",
+        help="Run scanned pages through local Tesseract (requires the 'ocr' extra). "
+        "A one-time spot-check per S2-03, not intended for the full backlog.",
+    )
     args = parser.parse_args()
 
     extract_corpus(
@@ -268,6 +301,7 @@ def main() -> None:
         classification_path=args.classification,
         dest_dir=args.dest,
         force=args.force,
+        with_ocr=args.with_ocr,
     )
 
 
