@@ -20,8 +20,9 @@ import argparse
 import json
 from collections import defaultdict
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
+from protocol_drift.ingestion.models import Chunk
 from protocol_drift.ingestion.sections import UNCLASSIFIED
 
 DEFAULT_EXTRACTED_DIR = Path("data/extracted")
@@ -186,7 +187,10 @@ def _split_table_rows(table: dict[str, Any], table_chunk_tokens: int) -> list[li
     return groups
 
 
-def _table_chunk_type(table: dict[str, Any]) -> str:
+ChunkType = Literal["text", "table", "assessment_schedule"]
+
+
+def _table_chunk_type(table: dict[str, Any]) -> ChunkType:
     if table.get("source_section") == "assessment_schedule":
         return "assessment_schedule"
     return "table"
@@ -217,28 +221,53 @@ def _contextual_header(
     return f"[{nct_id} | {doc_type} {version_label} | {section_path}]"
 
 
+def _is_ocr_for_page_range(document_content: dict[str, Any], page_range: list[int]) -> bool:
+    """True if any page this chunk's range covers required OCR -- per
+    S2-01/S2-03, a needs_ocr page contributes no blocks of its own, so it
+    never shows up as a block source directly, but it can still fall
+    *inside* a text chunk's page range when its non-OCR neighbors' content
+    gets packed into one chunk around it. The flag records that provenance
+    regardless of whether --with-ocr actually ran (S2-03's default path
+    skips it), per S2-09's spec."""
+    start, end = page_range
+    return any(
+        page["needs_ocr"]
+        for page in document_content["pages"]
+        if start <= page["page_number"] <= end
+    )
+
+
 def _build_chunk(
-    nct_id: str,
-    doc_type: str,
+    document_content: dict[str, Any],
     chunk_index: int,
-    chunk_type: str,
+    chunk_type: ChunkType,
     section_label: str,
     page_range: list[int],
     body_text: str,
     versions: list[dict[str, Any]],
 ) -> dict[str, Any]:
+    nct_id = document_content["nct_id"]
+    doc_type = document_content["doc_type"]
     doc_version = _version_for_page_range(page_range, versions)
     header = _contextual_header(nct_id, doc_type, doc_version, section_label)
-    return {
-        "nct_id": nct_id,
-        "doc_type": doc_type,
-        "chunk_index": chunk_index,
-        "chunk_type": chunk_type,
-        "section": section_label,
-        "page_range": page_range,
-        "doc_version": doc_version,
-        "text": f"{header}\n{body_text}",
-    }
+
+    # subsection is always None for now: S2-04's segmentation only ever
+    # detects top-level canonical sections (or unclassified), never a
+    # nested heading within one -- S2-09 spots for that field without
+    # requiring the nested-heading detection that would populate it.
+    chunk = Chunk(
+        nct_id=nct_id,
+        doc_type=doc_type,
+        doc_version=doc_version,
+        section=section_label,
+        subsection=None,
+        page_range=(page_range[0], page_range[1]),
+        chunk_type=chunk_type,
+        is_ocr=_is_ocr_for_page_range(document_content, page_range),
+        chunk_index=chunk_index,
+        text=f"{header}\n{body_text}",
+    )
+    return chunk.model_dump(mode="json")
 
 
 def _section_for_table(
@@ -271,9 +300,6 @@ def chunk_document(
     still exceeds the raised ceiling). A chunk never spans two sections --
     each section is chunked from its own isolated block list -- and a
     table is never split mid-row."""
-    nct_id = document_content["nct_id"]
-    doc_type = document_content["doc_type"]
-
     table_pages: set[int] = set()
     for table in tables:
         table_pages.update(range(table["page_range"][0], table["page_range"][1] + 1))
@@ -291,8 +317,7 @@ def chunk_document(
         for text_chunk in _chunk_blocks(blocks, chunk_tokens):
             chunks.append(
                 _build_chunk(
-                    nct_id,
-                    doc_type,
+                    document_content,
                     chunk_index,
                     "text",
                     section["label"],
@@ -312,8 +337,7 @@ def chunk_document(
             for rows in row_groups:
                 chunks.append(
                     _build_chunk(
-                        nct_id,
-                        doc_type,
+                        document_content,
                         chunk_index,
                         chunk_type,
                         section["label"],
