@@ -45,6 +45,7 @@ def test_extract_trial_row(current: dict) -> None:
     # per-document logic (one doc flags protocol, a separate one flags SAP)
     assert row["has_protocol"] is True
     assert row["has_sap"] is True
+    assert row["enrollment_count"] == 2031
 
 
 def test_extract_outcomes_three_way_comparison(current: dict, v0: dict) -> None:

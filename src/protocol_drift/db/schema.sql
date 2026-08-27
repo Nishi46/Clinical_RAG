@@ -20,6 +20,13 @@ CREATE TABLE IF NOT EXISTS trials (
     has_sap BOOLEAN NOT NULL DEFAULT FALSE
 );
 
+-- S3-03: T1's enrollment-target question needs this and it wasn't captured
+-- at S1-05 time. `IF NOT EXISTS` (not a separate migrations/ setup) so
+-- re-running this file against the already-populated dev database is safe,
+-- matching every CREATE TABLE above -- run db/extract.py --apply-schema
+-- again to both add the column and backfill it for the existing cohort.
+ALTER TABLE trials ADD COLUMN IF NOT EXISTS enrollment_count INTEGER;
+
 -- source: 'registered_first' (from versions/0.json), 'registered_current'
 -- (from current.json), 'results_reported' (from current.json's resultsSection,
 -- filtered to PRIMARY). `version` is 0 for registered_first; NULL for the

@@ -55,6 +55,7 @@ def extract_trial_row(current: dict[str, Any]) -> dict[str, Any]:
         "primary_completion_date": (status.get("primaryCompletionDateStruct") or {}).get("date"),
         "has_protocol": any(d.get("hasProtocol") for d in docs),
         "has_sap": any(d.get("hasSap") for d in docs),
+        "enrollment_count": (design.get("enrollmentInfo") or {}).get("count"),
     }
 
 
@@ -163,11 +164,12 @@ def extract_amendments(nct_id: str, history: dict[str, Any]) -> list[dict[str, A
 _UPSERT_TRIAL = """
 INSERT INTO trials (
     nct_id, brief_title, condition, phase, sponsor_class, sponsor_name,
-    overall_status, start_date, primary_completion_date, has_protocol, has_sap
+    overall_status, start_date, primary_completion_date, has_protocol, has_sap,
+    enrollment_count
 ) VALUES (
     %(nct_id)s, %(brief_title)s, %(condition)s, %(phase)s, %(sponsor_class)s,
     %(sponsor_name)s, %(overall_status)s, %(start_date)s,
-    %(primary_completion_date)s, %(has_protocol)s, %(has_sap)s
+    %(primary_completion_date)s, %(has_protocol)s, %(has_sap)s, %(enrollment_count)s
 )
 ON CONFLICT (nct_id) DO UPDATE SET
     brief_title = EXCLUDED.brief_title,
@@ -179,7 +181,8 @@ ON CONFLICT (nct_id) DO UPDATE SET
     start_date = EXCLUDED.start_date,
     primary_completion_date = EXCLUDED.primary_completion_date,
     has_protocol = EXCLUDED.has_protocol,
-    has_sap = EXCLUDED.has_sap
+    has_sap = EXCLUDED.has_sap,
+    enrollment_count = EXCLUDED.enrollment_count
 """
 
 _UPSERT_ELIGIBILITY = """

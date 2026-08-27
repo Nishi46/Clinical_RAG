@@ -29,6 +29,9 @@ ocr = [
 retrieval = [
     "sentence-transformers>=3.0",
 ]
+eval = [
+    "rapidfuzz>=3.0",
+]
 
 [build-system]
 requires = ["setuptools>=68"]
