@@ -1,4 +1,4 @@
-.PHONY: lint typecheck test test-db fmt corpus-report
+.PHONY: lint typecheck test test-db fmt corpus-report ingestion-report
 
 lint:
 	ruff check .
@@ -18,3 +18,6 @@ fmt:
 
 corpus-report:
 	python -m protocol_drift.reports.corpus_report
+
+ingestion-report:
+	python -m protocol_drift.reports.ingestion_report
