@@ -52,8 +52,16 @@ class EmbeddedChunk(BaseModel):
     embedding: list[float]
 
 
-def chunk_id_for(chunk: Chunk) -> str:
-    return f"{chunk.nct_id}:{chunk.doc_type}:{chunk.chunk_index}"
+def chunk_id_for(chunk: Chunk, doc_label: str | None = None) -> str:
+    """`{nct_id}:{doc_label}:{chunk_index}`. `doc_label` defaults to
+    `chunk.doc_type`, but callers iterating `data/chunks/` must pass the
+    source file's stem (e.g. "protocol_2") instead: S2-01's `_N` suffix
+    convention means a handful of trials (e.g. NCT03083873) have more than
+    one document of the same doc_type, each chunked with `chunk_index`
+    restarting at 0 -- using bare `doc_type` for all of them collides two
+    distinct chunks onto the same id."""
+    label = doc_label if doc_label is not None else chunk.doc_type
+    return f"{chunk.nct_id}:{label}:{chunk.chunk_index}"
 
 
 def compute_cache_key(revision: str, chunk_id: str, text: str) -> str:
@@ -75,17 +83,19 @@ def embed_chunks(
     revision: str,
     cache: dict[str, EmbeddedChunk] | None = None,
     batch_size: int = DEFAULT_BATCH_SIZE,
+    doc_label: str | None = None,
 ) -> Iterator[EmbeddedChunk]:
     """Embeds `chunks` in batches of `batch_size`, reusing `cache` (keyed by
     `embedding_cache_key`) for any chunk already embedded under this
     revision. `embedder.encode` is only ever called with the subset of a
     batch that misses the cache -- a batch that's entirely cache hits never
-    calls it at all, which is what makes a fully-cached re-run a no-op."""
+    calls it at all, which is what makes a fully-cached re-run a no-op.
+    `doc_label` is forwarded to `chunk_id_for` -- see its docstring."""
     cache = cache if cache is not None else {}
     batch: list[Chunk] = []
 
     def flush(batch: list[Chunk]) -> Iterator[EmbeddedChunk]:
-        keyed = [(c, chunk_id_for(c)) for c in batch]
+        keyed = [(c, chunk_id_for(c, doc_label)) for c in batch]
         keyed_with_cache_key = [
             (c, cid, compute_cache_key(revision, cid, c.text)) for c, cid in keyed
         ]
@@ -185,7 +195,12 @@ def embed_corpus(
         try:
             embedded = list(
                 embed_chunks(
-                    chunks, embedder, revision, cache=existing_cache, batch_size=batch_size
+                    chunks,
+                    embedder,
+                    revision,
+                    cache=existing_cache,
+                    batch_size=batch_size,
+                    doc_label=chunks_path.stem,
                 )
             )
         except Exception as exc:

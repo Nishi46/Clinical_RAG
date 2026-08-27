@@ -84,6 +84,20 @@ def test_chunk_id_matches_s3_02_format() -> None:
     assert chunk_id_for(chunk) == "NCT00000001:protocol:3"
 
 
+def test_chunk_id_doc_label_disambiguates_duplicate_doc_type_files() -> None:
+    # S2-01's "_N" suffix convention: a trial with more than one document of
+    # the same doc_type (e.g. NCT03083873's protocol/protocol_2/protocol_3)
+    # produces chunk files that each restart chunk_index at 0. Without a
+    # doc_label override, chunk_id_for would collide across those files.
+    chunk_a = _chunk("NCT03083873", 0, "first protocol doc")
+    chunk_b = _chunk("NCT03083873", 0, "second protocol doc")
+
+    assert chunk_id_for(chunk_a) == chunk_id_for(chunk_b)  # default: would collide
+    assert chunk_id_for(chunk_a, "protocol") != chunk_id_for(chunk_b, "protocol_2")
+    assert chunk_id_for(chunk_a, "protocol") == "NCT03083873:protocol:0"
+    assert chunk_id_for(chunk_b, "protocol_2") == "NCT03083873:protocol_2:0"
+
+
 def test_partial_cache_only_encodes_misses() -> None:
     chunks = _fixture_chunks()
     embedder = _fake_embedder()
