@@ -26,6 +26,9 @@ dev = [
 ocr = [
     "pytesseract>=0.3.10",
 ]
+retrieval = [
+    "sentence-transformers>=3.0",
+]
 
 [build-system]
 requires = ["setuptools>=68"]
@@ -52,6 +55,10 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = ["pytesseract", "pytesseract.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["sentence_transformers", "sentence_transformers.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

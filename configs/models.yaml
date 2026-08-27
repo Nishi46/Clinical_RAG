@@ -23,14 +23,22 @@ judge:
     deliberate, not by drifting the tag.
 
 embeddings:
-  # Not yet selected -- S3-01 will pick a specific sentence-transformers model
-  # (not an Ollama model; the plan calls for the sentence-transformers library
-  # directly, embedded in the ingestion/retrieval code, not served via Ollama).
+  # Picked at S3-01: same BAAI family as the planned bge-reranker-v2-m3
+  # (S3-11), keeping the retrieval stack internally consistent. 768-dim,
+  # ~440MB, comfortable on 16GB. Not an Ollama model -- loaded directly via
+  # sentence-transformers (the `retrieval` optional dependency group), per
+  # project_plan.md's "Plain Python" stack choice. `revision` pins the HF repo
+  # commit (not the `main` branch tag) so a future upstream push to the repo
+  # can't silently change embeddings out from under the cache -- same
+  # "pin by digest, not tag" principle as generation/judge above, applied to
+  # a HF commit SHA instead of an Ollama digest.
   # Note: an Ollama embedding model (mxbai-embed-large, digest 468836162de7) is
   # already pulled locally but is NOT the plan's choice -- do not use it by
   # default; it's listed here only so its presence isn't mistaken for the pick.
-  name: null
-  digest: null
+  name: BAAI/bge-base-en-v1.5
+  revision: a5beb1e3e68b9ab74eb54cfd186867f64f240e1a
+  dimension: 768
+  confirmed: 2026-08-27
 
 reranker:
   # bge-reranker-v2-m3 per sprint_plan.md -- not yet pulled/pinned as of Sprint 0.
