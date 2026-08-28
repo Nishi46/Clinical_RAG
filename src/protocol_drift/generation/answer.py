@@ -16,6 +16,7 @@ from dataclasses import dataclass
 
 from protocol_drift.eval.models import EvalQuestion
 from protocol_drift.generation import ollama_client
+from protocol_drift.retrieval.types import RetrievedChunk
 from protocol_drift.trace.store import TraceStore, compute_prompt_hash
 
 # Mirrors configs/models.yaml's `generation` entry -- kept as a literal here
@@ -28,17 +29,13 @@ REFUSAL_TOKEN = "NOT_ANSWERABLE"
 
 _CITATION_PATTERN = re.compile(r"\[(\d+)\]")
 
-
-@dataclass(frozen=True)
-class RetrievedChunk:
-    """The minimal shape generate_answer needs from a retrieval result --
-    just the authoritative S3-02 chunk_id and its (already header-prefixed)
-    text. Decoupled from `ingestion.models.Chunk` (which has no chunk_id
-    field of its own) and from any specific not-yet-built retrieval
-    function's return type."""
-
-    chunk_id: str
-    text: str
+__all__ = [
+    "RetrievedChunk",  # re-exported: this module's original home before S3-11
+    "GeneratedAnswer",
+    "build_prompt",
+    "cached_generate",
+    "generate_answer",
+]
 
 
 @dataclass

@@ -19,7 +19,7 @@ from protocol_drift.eval.retrieval_scorer import (
     recall_at_k,
     score_retrieval_run,
 )
-from protocol_drift.trace.store import TraceStore
+from protocol_drift.trace.store import TraceStore, traced_call
 
 # Retrieved 5, gold = {"A", "B"} at ranks 2 and 4 (1-indexed).
 RETRIEVED = ["X", "A", "Y", "B", "Z"]
@@ -139,3 +139,40 @@ def test_score_retrieval_run_writes_full_trace(conn: psycopg.Connection) -> None
         cur.execute("SELECT count(*) FROM chunk_hit WHERE id > %s", (before["chunk_hit"],))
         row = cur.fetchone()
         assert row is not None and row[0] == 5 + 2  # 5 hits for q1, 2 for q2
+
+
+@pytest.mark.db
+def test_score_retrieval_run_with_no_stage_trusts_retrieve_fn_to_self_trace(
+    conn: psycopg.Connection,
+) -> None:
+    store = TraceStore(conn)
+    before = _max_ids(conn)
+    questions = [
+        EvalQuestion(
+            question_id="q1",
+            nct_id="NCT00000001",
+            question_text="What is the primary outcome?",
+            gold_answer="overall survival",
+            gold_chunk_ids=["A", "B"],
+        )
+    ]
+
+    def self_tracing_retrieve(question_text: str, query_id: int) -> list[str]:
+        with traced_call(store, query_id, "rerank") as trace:
+            trace.chunk_hits = [{"chunk_id": "A", "rank": 0}]
+        return ["A"]
+
+    scores = score_retrieval_run(questions, self_tracing_retrieve, store, stage=None)
+
+    assert scores.n_questions == 1
+    assert scores.recall_at_k[5] == pytest.approx(0.5)
+
+    with conn.cursor() as cur:
+        # Exactly one "rerank" row -- not a second one from score_retrieval_run
+        # itself, since stage=None means it trusts retrieve_fn's own tracing.
+        cur.execute(
+            "SELECT count(*) FROM retrieval_step WHERE stage = 'rerank' AND id > %s",
+            (before["retrieval_step"],),
+        )
+        row = cur.fetchone()
+        assert row is not None and row[0] == 1

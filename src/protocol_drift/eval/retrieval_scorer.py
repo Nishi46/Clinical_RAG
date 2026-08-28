@@ -85,21 +85,29 @@ def score_retrieval_run(
     questions: Sequence[EvalQuestion],
     retrieve_fn: Callable[[str, int], list[str]],
     store: TraceStore,
-    stage: str,
+    stage: str | None = None,
     ks: tuple[int, ...] = (1, 5, 10, 20),
     tier: str | None = None,
 ) -> RetrievalScores:
     """Runs `retrieve_fn(question.question_text, query_id) -> list[chunk_id]`
     for every question, scores it against `gold_chunk_ids`, and aggregates
-    mean Recall@k / Precision@k / MRR / nDCG@10 across the set. The whole
-    call is wrapped in `traced_call(store, query_id, stage)`, logging the
-    final ranked list as this stage's chunk_hits -- `stage` must be one of
-    the trace schema's allowed values ('dense', 'bm25', 'rrf', 'prefilter',
-    'rerank'); pick whichever names the terminal output of `retrieve_fn`
-    (e.g. "rrf" for a fused hybrid search). `retrieve_fn` also receives
-    `query_id` so a multi-stage retriever (S3-09's hybrid_search) can log
-    its own internal sub-stage traces (its dense/bm25 legs) under the same
-    query without this function needing to know its internals."""
+    mean Recall@k / Precision@k / MRR / nDCG@10 across the set.
+
+    `retrieve_fn` also receives `query_id` so a multi-stage retriever can
+    log its own internal traced_call sub-stages under the same query
+    without this function needing to know its internals.
+
+    `stage`, if given, additionally wraps the whole retrieve_fn call in its
+    own `traced_call(store, query_id, stage)`, logging the final ranked
+    list as that stage's chunk_hits -- appropriate for a single-stage
+    retrieve_fn with no tracing of its own (e.g. a bare dense_search or
+    lexical_search baseline: pass stage="dense"/"bm25" and this is its only
+    trace). Leave `stage=None` (the default) for a retrieve_fn that already
+    fully self-traces (S3-09's hybrid_search, S3-11's rerank_ladder) --
+    wrapping it again here would produce a second row under the same stage
+    label with a different (whole-pipeline, not single-stage) latency,
+    corrupting any per-stage latency aggregate read back from the trace
+    store later (S3-12)."""
     recall_sums = dict.fromkeys(ks, 0.0)
     precision_sums = dict.fromkeys(ks, 0.0)
     rr_sum = 0.0
@@ -107,11 +115,15 @@ def score_retrieval_run(
 
     for question in questions:
         query_id = store.log_query(question.question_text, tier=tier)
-        with traced_call(store, query_id, stage) as trace:
+        if stage is not None:
+            with traced_call(store, query_id, stage) as trace:
+                retrieved = retrieve_fn(question.question_text, query_id)
+                trace.chunk_hits = [
+                    {"chunk_id": chunk_id, "rank": rank}
+                    for rank, chunk_id in enumerate(retrieved)
+                ]
+        else:
             retrieved = retrieve_fn(question.question_text, query_id)
-            trace.chunk_hits = [
-                {"chunk_id": chunk_id, "rank": rank} for rank, chunk_id in enumerate(retrieved)
-            ]
 
         gold = question.gold_chunk_ids
         for k in ks:

@@ -41,6 +41,13 @@ embeddings:
   confirmed: 2026-08-27
 
 reranker:
-  # bge-reranker-v2-m3 per sprint_plan.md -- not yet pulled/pinned as of Sprint 0.
-  name: null
-  digest: null
+  # Picked at S3-11, per sprint_plan.md/project_plan.md's already-named
+  # choice: same BAAI family as the embedder (S3-01), keeping the retrieval
+  # stack internally consistent. A cross-encoder (sentence_transformers
+  # CrossEncoder), not an Ollama model -- loaded via the same `retrieval`
+  # optional dependency group as the embedder, no new dependency needed.
+  # `revision` pins the HF repo commit, same "pin by digest, not tag"
+  # principle as every other entry in this file.
+  name: BAAI/bge-reranker-v2-m3
+  revision: 953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e
+  confirmed: 2026-08-28
