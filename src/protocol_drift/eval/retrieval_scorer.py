@@ -83,21 +83,23 @@ class RetrievalScores:
 
 def score_retrieval_run(
     questions: Sequence[EvalQuestion],
-    retrieve_fn: Callable[[str], list[str]],
+    retrieve_fn: Callable[[str, int], list[str]],
     store: TraceStore,
     stage: str,
     ks: tuple[int, ...] = (1, 5, 10, 20),
     tier: str | None = None,
 ) -> RetrievalScores:
-    """Runs `retrieve_fn(question.question_text) -> list[chunk_id]` for
-    every question, scores it against `gold_chunk_ids`, and aggregates mean
-    Recall@k / Precision@k / MRR / nDCG@10 across the set. Every call is
-    wrapped in `traced_call(store, query_id, stage)` so each question
-    writes a full query + retrieval_step + chunk_hit trace -- `stage` must
-    be one of the trace schema's allowed values ('dense', 'bm25', 'rrf',
-    'prefilter', 'rerank'); for a bare retrieve_fn with no internal staging
-    of its own (e.g. this scorer's first use, against a dense-only
-    baseline), pass "dense"."""
+    """Runs `retrieve_fn(question.question_text, query_id) -> list[chunk_id]`
+    for every question, scores it against `gold_chunk_ids`, and aggregates
+    mean Recall@k / Precision@k / MRR / nDCG@10 across the set. The whole
+    call is wrapped in `traced_call(store, query_id, stage)`, logging the
+    final ranked list as this stage's chunk_hits -- `stage` must be one of
+    the trace schema's allowed values ('dense', 'bm25', 'rrf', 'prefilter',
+    'rerank'); pick whichever names the terminal output of `retrieve_fn`
+    (e.g. "rrf" for a fused hybrid search). `retrieve_fn` also receives
+    `query_id` so a multi-stage retriever (S3-09's hybrid_search) can log
+    its own internal sub-stage traces (its dense/bm25 legs) under the same
+    query without this function needing to know its internals."""
     recall_sums = dict.fromkeys(ks, 0.0)
     precision_sums = dict.fromkeys(ks, 0.0)
     rr_sum = 0.0
@@ -106,7 +108,7 @@ def score_retrieval_run(
     for question in questions:
         query_id = store.log_query(question.question_text, tier=tier)
         with traced_call(store, query_id, stage) as trace:
-            retrieved = retrieve_fn(question.question_text)
+            retrieved = retrieve_fn(question.question_text, query_id)
             trace.chunk_hits = [
                 {"chunk_id": chunk_id, "rank": rank} for rank, chunk_id in enumerate(retrieved)
             ]

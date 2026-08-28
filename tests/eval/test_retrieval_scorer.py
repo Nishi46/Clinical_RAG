@@ -114,7 +114,8 @@ def test_score_retrieval_run_writes_full_trace(conn: psycopg.Connection) -> None
         ),
     ]
 
-    def fake_retrieve(question_text: str) -> list[str]:
+    def fake_retrieve(question_text: str, query_id: int) -> list[str]:
+        assert query_id > 0
         return RETRIEVED if "primary" in question_text else ["Z", "Q"]
 
     scores = score_retrieval_run(questions, fake_retrieve, store, stage="dense")
