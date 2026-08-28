@@ -96,6 +96,36 @@ class TraceStore:
             (generation_id, tokens_in, tokens_out, wall_clock_ms),
         )
 
+    def find_generation(self, model_digest: str, prompt_hash: str) -> dict[str, Any] | None:
+        """The most recent generation logged under this exact (model_digest,
+        prompt_hash) pair, joined against its cost_record -- the read side
+        of the "cache everything, keyed on model digest + prompt hash"
+        contract `compute_prompt_hash` was written for. `None` on a cache
+        miss. Callers reusing a cached `response_text` should still log a
+        fresh generation/cost row for their own query_id (every call stays
+        traced), just with zero new tokens/wall-clock time -- the original
+        row already carries the real cost of producing this response."""
+        with self._conn.cursor() as cur:
+            cur.execute(
+                "SELECT g.id, g.query_id, g.response_text, g.token_count, "
+                "c.tokens_in, c.tokens_out "
+                "FROM generation g LEFT JOIN cost_record c ON c.generation_id = g.id "
+                "WHERE g.model_digest = %s AND g.prompt_hash = %s "
+                "ORDER BY g.id DESC LIMIT 1",
+                (model_digest, prompt_hash),
+            )
+            row = cur.fetchone()
+        if row is None:
+            return None
+        return {
+            "id": row[0],
+            "query_id": row[1],
+            "response_text": row[2],
+            "token_count": row[3],
+            "tokens_in": row[4],
+            "tokens_out": row[5],
+        }
+
     def _insert_returning_id(self, sql: str, params: tuple[Any, ...]) -> int:
         with self._conn.cursor() as cur:
             cur.execute(sql, params)
