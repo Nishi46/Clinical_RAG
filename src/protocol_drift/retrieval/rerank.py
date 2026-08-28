@@ -17,7 +17,7 @@ import psycopg
 
 from protocol_drift.retrieval.hybrid import hybrid_search
 from protocol_drift.retrieval.query_parse import QueryFilters
-from protocol_drift.retrieval.types import RetrievedChunk
+from protocol_drift.retrieval.types import RetrievedChunk, fetch_chunks
 from protocol_drift.trace.store import TraceStore, traced_call
 
 DEFAULT_CANDIDATE_K = 50
@@ -58,21 +58,6 @@ def rerank(
     return [chunk.chunk_id for chunk, _ in ranked[:top_k]]
 
 
-def _fetch_chunks(conn: psycopg.Connection[Any], chunk_ids: list[str]) -> list[RetrievedChunk]:
-    if not chunk_ids:
-        return []
-    with conn.cursor() as cur:
-        cur.execute("SELECT chunk_id, text FROM chunks WHERE chunk_id = ANY(%s)", (chunk_ids,))
-        text_by_id = dict(cur.fetchall())
-    # Preserve hybrid_search's ranking order -- `= ANY(...)` makes no
-    # ordering guarantee of its own.
-    return [
-        RetrievedChunk(chunk_id=chunk_id, text=text_by_id[chunk_id])
-        for chunk_id in chunk_ids
-        if chunk_id in text_by_id
-    ]
-
-
 def rerank_ladder(
     query: str,
     embedder: Any,
@@ -93,7 +78,7 @@ def rerank_ladder(
     candidate_ids = hybrid_search(
         query, k_candidates, embedder, conn, store, query_id, filters=filters
     )
-    candidate_chunks = _fetch_chunks(conn, candidate_ids)
+    candidate_chunks = fetch_chunks(conn, candidate_ids)
 
     with traced_call(store, query_id, "rerank") as trace:
         reranked_ids = rerank(query, candidate_chunks, reranker, top_k=top_k)

@@ -1,4 +1,4 @@
-.PHONY: lint typecheck test test-db fmt corpus-report ingestion-report
+.PHONY: lint typecheck test test-db fmt corpus-report ingestion-report ablation
 
 lint:
 	ruff check .
@@ -21,3 +21,6 @@ corpus-report:
 
 ingestion-report:
 	python -m protocol_drift.reports.ingestion_report
+
+ablation:
+	python -m protocol_drift.eval.ablation

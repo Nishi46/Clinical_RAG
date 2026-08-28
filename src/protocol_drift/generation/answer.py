@@ -124,9 +124,15 @@ def generate_answer(
     model: str = DEFAULT_MODEL_NAME,
     digest: str = DEFAULT_MODEL_DIGEST,
     tier: str | None = None,
+    query_id: int | None = None,
 ) -> GeneratedAnswer:
+    """`query_id`, if given, reuses an already-logged query (e.g. S3-12's
+    `run_rung`, which needs retrieval and generation for the same question
+    to share one query row so its per-question trace reads as a single
+    coherent pipeline) instead of logging a new one."""
     prompt = build_prompt(question, retrieved_chunks)
-    query_id = store.log_query(question.question_text, tier=tier)
+    if query_id is None:
+        query_id = store.log_query(question.question_text, tier=tier)
     response_text, generation_id, from_cache = cached_generate(
         prompt, query_id, store, model, digest
     )
