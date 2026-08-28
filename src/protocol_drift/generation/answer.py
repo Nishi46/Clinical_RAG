@@ -76,18 +76,24 @@ def _parse_citations(response_text: str, chunks: Sequence[RetrievedChunk]) -> li
     return cited_chunk_ids
 
 
-def generate_answer(
-    question: EvalQuestion,
-    retrieved_chunks: Sequence[RetrievedChunk],
+def cached_generate(
+    prompt: str,
+    query_id: int,
     store: TraceStore,
-    model: str = DEFAULT_MODEL_NAME,
-    digest: str = DEFAULT_MODEL_DIGEST,
-    tier: str | None = None,
-) -> GeneratedAnswer:
-    prompt = build_prompt(question, retrieved_chunks)
-    prompt_hash = compute_prompt_hash(digest, prompt)
-    query_id = store.log_query(question.question_text, tier=tier)
+    model: str,
+    digest: str,
+) -> tuple[str, int, bool]:
+    """One cached + traced model call, generic over any prompt (an answer
+    prompt, a judge-scoring prompt, a claim-extraction prompt, ...):
+    computes `prompt_hash` and reuses a prior response if `store` already
+    has a generation row for this exact (model_digest, prompt_hash) pair,
+    otherwise calls Ollama for real. Always logs a fresh generation + cost
+    row under `query_id` -- a cache hit still gets traced, it just costs
+    zero new tokens/wall-clock time, since the original row already
+    carries the real cost of producing this response.
 
+    Returns (response_text, generation_id, from_cache)."""
+    prompt_hash = compute_prompt_hash(digest, prompt)
     cached = store.find_generation(digest, prompt_hash)
     from_cache = cached is not None
     if cached is not None:
@@ -111,6 +117,22 @@ def generate_answer(
         query_id, digest, prompt_hash, response_text, latency_ms, token_count
     )
     store.log_cost(generation_id, tokens_in, tokens_out, wall_clock_ms)
+    return response_text, generation_id, from_cache
+
+
+def generate_answer(
+    question: EvalQuestion,
+    retrieved_chunks: Sequence[RetrievedChunk],
+    store: TraceStore,
+    model: str = DEFAULT_MODEL_NAME,
+    digest: str = DEFAULT_MODEL_DIGEST,
+    tier: str | None = None,
+) -> GeneratedAnswer:
+    prompt = build_prompt(question, retrieved_chunks)
+    query_id = store.log_query(question.question_text, tier=tier)
+    response_text, generation_id, from_cache = cached_generate(
+        prompt, query_id, store, model, digest
+    )
 
     is_refusal = response_text.strip() == REFUSAL_TOKEN
     cited_chunk_ids = [] if is_refusal else _parse_citations(response_text, retrieved_chunks)

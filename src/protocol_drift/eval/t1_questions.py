@@ -30,6 +30,8 @@ import psycopg
 from pydantic import BaseModel, ConfigDict
 from rapidfuzz import fuzz
 
+from protocol_drift.normalize.text import contains_as_whole_token
+
 DEFAULT_COHORT_PATH = Path("data/cohort.json")
 DEFAULT_OUTPUT_PATH = Path("data/eval/t1.jsonl")
 DEFAULT_UNLOCATABLE_LOG = Path("data/eval/t1_unlocatable.log")
@@ -73,16 +75,6 @@ def _normalize(text: str) -> str:
 MIN_LENGTH_FOR_FUZZY_MATCH = 6
 
 
-def _contains_as_whole_token(normalized_answer: str, normalized_text: str) -> bool:
-    """Word-boundary substring check -- plain `in` would let a short numeric
-    answer like "6" match inside "16" or "26" (a real bug hit while
-    generating the full T1 set: an enrollment count of "6" matched 34
-    chunks via naive substring search). `\\b` treats digits and letters as
-    the same "word" class, so "6" won't match inside "16" but will match a
-    standalone "6" or "6" followed by punctuation/whitespace."""
-    return re.search(rf"\b{re.escape(normalized_answer)}\b", normalized_text) is not None
-
-
 def locate_gold_chunk(
     nct_id: str,
     doc_type: str,
@@ -111,7 +103,7 @@ def locate_gold_chunk(
     matches = []
     for chunk_id, text in rows:
         normalized_text = _normalize(text)
-        if _contains_as_whole_token(normalized_answer, normalized_text):
+        if contains_as_whole_token(normalized_answer, normalized_text):
             matches.append(chunk_id)
         elif (
             len(normalized_answer) >= MIN_LENGTH_FOR_FUZZY_MATCH
