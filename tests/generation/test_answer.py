@@ -132,6 +132,7 @@ def test_generate_answer_refusal_round_trips_without_citations(conn: psycopg.Con
 @responses.activate
 def test_generate_answer_caches_on_prompt_hash(conn: psycopg.Connection) -> None:
     store = TraceStore(conn)
+    before = _max_ids(conn)
     _mock_ollama("The primary outcome is overall survival [1].")
 
     first = generate_answer(QUESTION, CHUNKS, store)
@@ -147,9 +148,9 @@ def test_generate_answer_caches_on_prompt_hash(conn: psycopg.Connection) -> None
     assert second.generation_id != first.generation_id  # still its own generation row
 
     with conn.cursor() as cur:
-        cur.execute("SELECT count(*) FROM query")
+        cur.execute("SELECT count(*) FROM query WHERE id > %s", (before["query"],))
         row = cur.fetchone()
         assert row is not None and row[0] == 2
-        cur.execute("SELECT count(*) FROM generation")
+        cur.execute("SELECT count(*) FROM generation WHERE id > %s", (before["generation"],))
         row = cur.fetchone()
         assert row is not None and row[0] == 2

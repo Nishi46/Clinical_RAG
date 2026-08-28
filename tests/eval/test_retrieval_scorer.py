@@ -96,6 +96,7 @@ def conn() -> Iterator[psycopg.Connection]:
 @pytest.mark.db
 def test_score_retrieval_run_writes_full_trace(conn: psycopg.Connection) -> None:
     store = TraceStore(conn)
+    before = _max_ids(conn)
     questions = [
         EvalQuestion(
             question_id="q1",
@@ -125,12 +126,15 @@ def test_score_retrieval_run_writes_full_trace(conn: psycopg.Connection) -> None
     assert scores.mrr == pytest.approx(0.75)
 
     with conn.cursor() as cur:
-        cur.execute("SELECT count(*) FROM query")
+        cur.execute("SELECT count(*) FROM query WHERE id > %s", (before["query"],))
         row = cur.fetchone()
         assert row is not None and row[0] == 2
-        cur.execute("SELECT count(*) FROM retrieval_step WHERE stage = 'dense'")
+        cur.execute(
+            "SELECT count(*) FROM retrieval_step WHERE stage = 'dense' AND id > %s",
+            (before["retrieval_step"],),
+        )
         row = cur.fetchone()
         assert row is not None and row[0] == 2
-        cur.execute("SELECT count(*) FROM chunk_hit")
+        cur.execute("SELECT count(*) FROM chunk_hit WHERE id > %s", (before["chunk_hit"],))
         row = cur.fetchone()
         assert row is not None and row[0] == 5 + 2  # 5 hits for q1, 2 for q2

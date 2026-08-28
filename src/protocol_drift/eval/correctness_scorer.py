@@ -115,16 +115,35 @@ def judged_correctness(
 
 
 def _correctness_prompt(question: EvalQuestion, generated_answer: str, gold_notes: str) -> str:
+    # Revision history (full calibration study in docs/judge_calibration.md):
+    # v1 (kappa=0.20) let the judge penalize phrasing/unit differences as
+    # factual errors and cite omissions that weren't actually in the
+    # ANSWER. This version (v2, kappa=0.38, the best of 3 tried) fixed
+    # most of that. A third attempt adding an explicit "don't invent a
+    # scope/timing distinction" line was also tried and made things worse
+    # (kappa=0.22) rather than better -- reverted, and per the 2-iteration
+    # cap this is the version kept and shipped.
     return (
-        "You are grading a clinical-trial question-answering system. Score the ANSWER "
-        "against the REFERENCE NOTES on a scale of 0, 0.5, or 1: "
-        "1 = fully correct, 0.5 = partially correct, 0 = incorrect.\n\n"
+        "You are grading a clinical-trial question-answering system for FACTUAL "
+        "CORRECTNESS. Grade the substance of the ANSWER, not its exact wording -- "
+        "different phrasing, units, or extra correct detail beyond what was asked must "
+        "NOT lower the score. Before citing any omission or error, re-read the ANSWER "
+        "text below and confirm the issue is really there.\n\n"
+        "Score on a scale of 0, 0.5, or 1:\n"
+        "1 = every fact the question asks for is present and accurate, with no material "
+        "omission (a multi-part question needs every part correct).\n"
+        "0.5 = the core idea, or most parts of a multi-part question, is right, but one "
+        "sub-part, qualifying condition, or specific detail is missing or wrong.\n"
+        "0 = the answer contradicts the REFERENCE NOTES, states an unrelated or "
+        "fabricated fact, or refuses to answer when the notes show the answer is "
+        "available.\n\n"
         f"QUESTION: {question.question_text}\n\n"
         f"ANSWER: {generated_answer}\n\n"
         f"REFERENCE NOTES: {gold_notes}\n\n"
         "Respond in exactly this format:\n"
         "SCORE: <0, 0.5, or 1>\n"
-        "JUSTIFICATION: <one sentence>"
+        "JUSTIFICATION: <one sentence; if the score is below 1, quote the exact part of "
+        "the ANSWER that is missing or wrong>"
     )
 
 
