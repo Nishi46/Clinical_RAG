@@ -29,6 +29,16 @@ CREATE TABLE IF NOT EXISTS retrieval_step (
 
 CREATE INDEX IF NOT EXISTS idx_retrieval_step_query_id ON retrieval_step (query_id);
 
+-- S3-10: the "prefilter" stage returns no chunk hits of its own (it narrows
+-- the search space for the dense/bm25 stages that follow, rather than
+-- producing a ranking) -- this is where its useful trace signal lives
+-- instead: which filter(s) actually fired, for S5's later failure analysis
+-- on cases where a wrong or missing filter explains a retrieval miss.
+-- `IF NOT EXISTS` (not a separate migration) so re-running this file
+-- against the already-populated dev database is safe, same convention as
+-- db/schema.sql's enrollment_count column.
+ALTER TABLE retrieval_step ADD COLUMN IF NOT EXISTS filters_applied TEXT;
+
 -- One row per chunk returned by a retrieval_step. nct_id/doc_type/section/
 -- page_range are denormalized here (rather than looked up from the corpus
 -- index at read time) so the trace viewer (S5-02) can render a query's full

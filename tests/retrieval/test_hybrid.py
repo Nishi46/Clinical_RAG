@@ -6,9 +6,12 @@ from pgvector.psycopg import register_vector
 
 from protocol_drift.db import DEFAULT_DSN as DSN
 from protocol_drift.retrieval.hybrid import hybrid_search
+from protocol_drift.retrieval.query_parse import QueryFilters
 from protocol_drift.trace.store import TraceStore
 
 KNOWN_CHUNK_ID = "NCT03007407:protocol:19"
+KNOWN_NCT_ID = "NCT03007407"
+OTHER_TRIAL_CHUNK_ID = "NCT03007732:protocol:87"
 
 _TABLES_CHILD_TO_PARENT = ("cost_record", "generation", "chunk_hit", "retrieval_step", "query")
 
@@ -72,7 +75,9 @@ def test_hybrid_search_fuses_dense_and_lexical_results(conn: psycopg.Connection)
 
 
 @pytest.mark.db
-def test_hybrid_search_traces_dense_and_bm25_substages(conn: psycopg.Connection) -> None:
+def test_hybrid_search_traces_prefilter_dense_and_bm25_substages(
+    conn: psycopg.Connection,
+) -> None:
     store = TraceStore(conn)
     before = _max_ids(conn)
     query_id = store.log_query("stereotactic radiation therapy SBRT")
@@ -86,7 +91,7 @@ def test_hybrid_search_traces_dense_and_bm25_substages(conn: psycopg.Connection)
             (query_id, before["retrieval_step"]),
         )
         stages = [row[0] for row in cur.fetchall()]
-    assert stages == ["dense", "bm25"]
+    assert stages == ["prefilter", "dense", "bm25"]
 
 
 @pytest.mark.db
@@ -100,3 +105,84 @@ def test_hybrid_search_respects_k(conn: psycopg.Connection) -> None:
     )
 
     assert len(results) <= 3
+
+
+@pytest.mark.db
+def test_hybrid_search_with_nct_id_filter_only_returns_that_trial(
+    conn: psycopg.Connection,
+) -> None:
+    store = TraceStore(conn)
+    query_id = store.log_query("cancer treatment patient eligibility")
+    embedder = _FakeEmbedder(conn)
+    filters = QueryFilters(nct_id=KNOWN_NCT_ID)
+
+    results = hybrid_search(
+        "cancer treatment patient eligibility",
+        20,
+        embedder,
+        conn,
+        store,
+        query_id,
+        filters=filters,
+    )
+
+    assert results  # sanity: the filter didn't eliminate everything
+    with conn.cursor() as cur:
+        cur.execute("SELECT DISTINCT nct_id FROM chunks WHERE chunk_id = ANY(%s)", (results,))
+        nct_ids = {row[0] for row in cur.fetchall()}
+    assert nct_ids == {KNOWN_NCT_ID}
+    assert OTHER_TRIAL_CHUNK_ID not in results
+
+
+@pytest.mark.db
+def test_hybrid_search_logs_filters_applied_on_prefilter_stage(
+    conn: psycopg.Connection,
+) -> None:
+    store = TraceStore(conn)
+    before = _max_ids(conn)
+    query_id = store.log_query("cancer treatment patient eligibility")
+    embedder = _FakeEmbedder(conn)
+    filters = QueryFilters(nct_id=KNOWN_NCT_ID, doc_type="protocol")
+
+    hybrid_search(
+        "cancer treatment patient eligibility",
+        5,
+        embedder,
+        conn,
+        store,
+        query_id,
+        filters=filters,
+    )
+
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT filters_applied FROM retrieval_step "
+            "WHERE query_id = %s AND stage = 'prefilter' AND id > %s",
+            (query_id, before["retrieval_step"]),
+        )
+        row = cur.fetchone()
+    assert row is not None
+    assert f"nct_id={KNOWN_NCT_ID}" in row[0]
+    assert "doc_type=protocol" in row[0]
+
+
+@pytest.mark.db
+def test_hybrid_search_no_filters_logs_none_on_prefilter_stage(
+    conn: psycopg.Connection,
+) -> None:
+    store = TraceStore(conn)
+    before = _max_ids(conn)
+    query_id = store.log_query("cancer treatment patient eligibility")
+    embedder = _FakeEmbedder(conn)
+
+    hybrid_search("cancer treatment patient eligibility", 5, embedder, conn, store, query_id)
+
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT filters_applied FROM retrieval_step "
+            "WHERE query_id = %s AND stage = 'prefilter' AND id > %s",
+            (query_id, before["retrieval_step"]),
+        )
+        row = cur.fetchone()
+    assert row is not None
+    assert row[0] == "none"

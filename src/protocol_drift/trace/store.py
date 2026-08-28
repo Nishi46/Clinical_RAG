@@ -46,11 +46,17 @@ class TraceStore:
             "INSERT INTO query (text, tier) VALUES (%s, %s) RETURNING id", (text, tier)
         )
 
-    def log_retrieval_step(self, query_id: int, stage: str, latency_ms: float) -> int:
+    def log_retrieval_step(
+        self,
+        query_id: int,
+        stage: str,
+        latency_ms: float,
+        filters_applied: str | None = None,
+    ) -> int:
         return self._insert_returning_id(
-            "INSERT INTO retrieval_step (query_id, stage, latency_ms) "
-            "VALUES (%s, %s, %s) RETURNING id",
-            (query_id, stage, latency_ms),
+            "INSERT INTO retrieval_step (query_id, stage, latency_ms, filters_applied) "
+            "VALUES (%s, %s, %s, %s) RETURNING id",
+            (query_id, stage, latency_ms, filters_applied),
         )
 
     def log_chunk_hit(
@@ -139,9 +145,13 @@ class TraceStore:
 class RetrievalStepTrace:
     """Mutable accumulator yielded by ``traced_call``. Populate `chunk_hits`
     inside the `with` block; the step and every chunk hit are logged
-    automatically on exit, timed around the whole block."""
+    automatically on exit, timed around the whole block. `filters_applied`
+    is for stages that narrow the search space rather than rank it (S3-10's
+    "prefilter" stage returns no chunk hits of its own -- this free-text
+    note of which filter(s) fired is its only trace signal)."""
 
     chunk_hits: list[dict[str, Any]] = field(default_factory=list)
+    filters_applied: str | None = None
 
 
 @contextmanager
@@ -162,6 +172,6 @@ def traced_call(store: TraceStore, query_id: int, stage: str) -> Iterator[Retrie
         yield trace
     finally:
         latency_ms = (time.monotonic() - start) * 1000
-        step_id = store.log_retrieval_step(query_id, stage, latency_ms)
+        step_id = store.log_retrieval_step(query_id, stage, latency_ms, trace.filters_applied)
         for hit in trace.chunk_hits:
             store.log_chunk_hit(step_id, **hit)
