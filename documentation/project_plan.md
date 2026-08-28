@@ -266,18 +266,6 @@ Sample 100 failures, stratified across tiers, one primary label each:
 
 ---
 
-## 15. Interview questions this prepares you for
-
-- How did you build ground truth, and how do you know your judge is calibrated?
-- What's your retrieval recall ceiling, and how does it bound end-to-end accuracy?
-- Walk me through your dominant failure mode and what you did about it.
-- Why hybrid search over dense alone — where specifically did BM25 win?
-- How do you handle semantically equivalent phrasings when comparing two sources?
-- Why is precision more important than recall for your discrepancy task?
-- What would break first at 10,000 trials?
-
----
-
 ## Data sources
 
 - ClinicalTrials.gov API v2 — [clinicaltrials.gov/data-api/about-api](https://clinicaltrials.gov/data-api/about-api)
