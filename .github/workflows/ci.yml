@@ -40,13 +40,21 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: pip install -e ".[dev]"
+        # `eval` is required, not optional, here: t1_questions.py imports
+        # rapidfuzz at module level (unlike retrieval/generation's deferred
+        # heavy imports), so pytest can't even collect tests/eval/ without
+        # it. `retrieval` is included too so the full local dev surface is
+        # importable in CI, even though no test currently constructs a real
+        # SentenceTransformer/CrossEncoder (all retrieval/rerank tests mock
+        # the embedder/reranker).
+        run: pip install -e ".[dev,retrieval,eval]"
 
       - name: Set up database schema
         run: |
           psql "$PROTOCOL_DRIFT_DSN" -c "CREATE EXTENSION IF NOT EXISTS vector;"
           psql "$PROTOCOL_DRIFT_DSN" -f src/protocol_drift/db/schema.sql
           psql "$PROTOCOL_DRIFT_DSN" -f src/protocol_drift/trace/schema.sql
+          psql "$PROTOCOL_DRIFT_DSN" -f src/protocol_drift/retrieval/schema.sql
 
       - name: Lint (ruff)
         run: ruff check .

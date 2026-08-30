@@ -3,16 +3,18 @@ cross-encoder) and runs in the fast path. `rerank_ladder` drives real
 hybrid_search + a real trace store and is marked `db`.
 """
 
-from collections.abc import Iterator
-
 import psycopg
 import pytest
-from pgvector.psycopg import register_vector
 
-from protocol_drift.db import DEFAULT_DSN as DSN
 from protocol_drift.retrieval.rerank import rerank, rerank_ladder
 from protocol_drift.retrieval.types import RetrievedChunk
 from protocol_drift.trace.store import TraceStore
+from tests.retrieval.conftest import (
+    KNOWN_CHUNK_EMBEDDING,
+    KNOWN_CHUNK_ID,
+    KNOWN_CHUNK_MARKER,
+    max_ids,
+)
 
 CHUNKS = [
     RetrievedChunk(chunk_id="c1", text="low relevance"),
@@ -74,60 +76,38 @@ def test_rerank_default_top_k_is_eight() -> None:
 
 # --- rerank_ladder: real hybrid_search + real trace store ------------------
 
-KNOWN_CHUNK_ID = "NCT03007407:protocol:19"
-
-_TABLES_CHILD_TO_PARENT = ("cost_record", "generation", "chunk_hit", "retrieval_step", "query")
-
-
-def _max_ids(conn: psycopg.Connection) -> dict[str, int]:
-    ids: dict[str, int] = {}
-    with conn.cursor() as cur:
-        for table in _TABLES_CHILD_TO_PARENT:
-            cur.execute(f"SELECT COALESCE(MAX(id), 0) FROM {table}")
-            row = cur.fetchone()
-            ids[table] = row[0] if row else 0
-    return ids
-
-
-@pytest.fixture
-def conn() -> Iterator[psycopg.Connection]:
-    connection = psycopg.connect(DSN)
-    register_vector(connection)
-    before_ids = _max_ids(connection)
-    yield connection
-    connection.rollback()
-    with connection.cursor() as cur:
-        for table in _TABLES_CHILD_TO_PARENT:
-            cur.execute(f"DELETE FROM {table} WHERE id > %s", (before_ids[table],))
-    connection.commit()
-    connection.close()
-
 
 class _FakeEmbedder:
-    def __init__(self, conn: psycopg.Connection) -> None:
-        with conn.cursor() as cur:
-            cur.execute("SELECT embedding FROM chunks WHERE chunk_id = %s", (KNOWN_CHUNK_ID,))
-            row = cur.fetchone()
-        assert row is not None
-        self._vector = row[0].to_list()
+    """Always returns KNOWN_CHUNK_EMBEDDING regardless of input text, so the
+    dense leg of hybrid_search deterministically surfaces the fixture's
+    known chunk as a rerank candidate -- avoids needing the real
+    sentence-transformers model."""
 
     def encode(self, texts: list[str]) -> list[list[float]]:
-        return [self._vector for _ in texts]
+        return [KNOWN_CHUNK_EMBEDDING for _ in texts]
 
 
 class _RewardsKnownChunkReranker:
     """Scores the known chunk highest, everything else uniformly low --
-    deterministic without needing the real cross-encoder model."""
+    deterministic without needing the real cross-encoder model. Keys off
+    KNOWN_CHUNK_MARKER (a literal string planted in the fixture's chunk
+    text), not KNOWN_CHUNK_ID -- chunk_id strings never appear inside real
+    chunk text (the S2-08 contextual header embeds nct_id/doc_type/section,
+    not the chunk_index suffix), so checking for the id itself would pass
+    for the wrong reason (stable-sort preserving pre-existing order)."""
 
     def predict(self, pairs: list[tuple[str, str]]) -> list[float]:
-        return [1.0 if KNOWN_CHUNK_ID in text else 0.0 for _, text in pairs]
+        return [1.0 if KNOWN_CHUNK_MARKER in text else 0.0 for _, text in pairs]
 
 
 @pytest.mark.db
-def test_rerank_ladder_returns_top_k_from_hybrid_candidates(conn: psycopg.Connection) -> None:
+def test_rerank_ladder_returns_top_k_from_hybrid_candidates(
+    fixture_corpus: psycopg.Connection,
+) -> None:
+    conn = fixture_corpus
     store = TraceStore(conn)
     query_id = store.log_query("stereotactic radiation therapy SBRT")
-    embedder = _FakeEmbedder(conn)
+    embedder = _FakeEmbedder()
     reranker = _RewardsKnownChunkReranker()
 
     results = rerank_ladder(
@@ -146,12 +126,13 @@ def test_rerank_ladder_returns_top_k_from_hybrid_candidates(conn: psycopg.Connec
 
 @pytest.mark.db
 def test_rerank_ladder_traces_full_prefilter_dense_bm25_rerank_pipeline(
-    conn: psycopg.Connection,
+    fixture_corpus: psycopg.Connection,
 ) -> None:
+    conn = fixture_corpus
     store = TraceStore(conn)
-    before = _max_ids(conn)
+    before = max_ids(conn)
     query_id = store.log_query("stereotactic radiation therapy SBRT")
-    embedder = _FakeEmbedder(conn)
+    embedder = _FakeEmbedder()
     reranker = _RewardsKnownChunkReranker()
 
     rerank_ladder(
@@ -169,22 +150,22 @@ def test_rerank_ladder_traces_full_prefilter_dense_bm25_rerank_pipeline(
 
 @pytest.mark.db
 def test_rerank_ladder_rerank_stage_has_its_own_narrow_chunk_hits(
-    conn: psycopg.Connection,
+    fixture_corpus: psycopg.Connection,
 ) -> None:
+    conn = fixture_corpus
     store = TraceStore(conn)
-    before = _max_ids(conn)
+    before = max_ids(conn)
     query_id = store.log_query("stereotactic radiation therapy SBRT")
-    embedder = _FakeEmbedder(conn)
+    embedder = _FakeEmbedder()
     reranker = _RewardsKnownChunkReranker()
 
     rerank_ladder(
-        "stereotactic radiation therapy SBRT", embedder, reranker, conn, store, query_id, top_k=3
+        "stereotactic radiation therapy SBRT", embedder, reranker, conn, store, query_id, top_k=1
     )
 
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT id FROM retrieval_step "
-            "WHERE query_id = %s AND stage = 'rerank' AND id > %s",
+            "SELECT id FROM retrieval_step WHERE query_id = %s AND stage = 'rerank' AND id > %s",
             (query_id, before["retrieval_step"]),
         )
         row = cur.fetchone()
@@ -192,4 +173,4 @@ def test_rerank_ladder_rerank_stage_has_its_own_narrow_chunk_hits(
         step_id = row[0]
         cur.execute("SELECT count(*) FROM chunk_hit WHERE retrieval_step_id = %s", (step_id,))
         row = cur.fetchone()
-        assert row is not None and row[0] == 3
+        assert row is not None and row[0] == 1

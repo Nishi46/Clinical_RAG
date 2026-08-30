@@ -2,23 +2,19 @@
 whatever PROTOCOL_DRIFT_DSN points at in CI's service container).
 
 Marked `db`, same convention as tests/trace/test_store.py: excluded from the
-local `make test` fast path, run in CI. Inserts one throwaway row (a
-"TEST:..." chunk_id and a real cohort nct_id, so the chunks.nct_id FK is
-satisfied) and deletes it in teardown -- never touches the real loaded
-corpus.
+local `make test` fast path, run in CI. Inserts one throwaway row under the
+conftest fixture trial (so the chunks.nct_id FK is satisfied without
+depending on the real, gitignored corpus being loaded) and deletes it in
+teardown.
 """
-
-from collections.abc import Iterator
 
 import psycopg
 import pytest
 from pgvector import Vector
-from pgvector.psycopg import register_vector
 
-from protocol_drift.db import DEFAULT_DSN as DSN
+from tests.retrieval.conftest import FIXTURE_NCT_ID
 
 _TEST_CHUNK_ID = "TEST:schema_test:0"
-_TEST_NCT_ID = "NCT03007407"  # confirmed real row in trials (tests/ingestion/test_sections.py)
 
 _INSERT_TEST_CHUNK = """
     INSERT INTO chunks (
@@ -29,25 +25,14 @@ _INSERT_TEST_CHUNK = """
 """
 
 
-@pytest.fixture
-def conn() -> Iterator[psycopg.Connection]:
-    connection = psycopg.connect(DSN)
-    register_vector(connection)
-    yield connection
-    connection.rollback()
-    with connection.cursor() as cur:
-        cur.execute("DELETE FROM chunks WHERE chunk_id = %s", (_TEST_CHUNK_ID,))
-    connection.commit()
-    connection.close()
-
-
 @pytest.mark.db
-def test_insert_populates_text_search_automatically(conn: psycopg.Connection) -> None:
+def test_insert_populates_text_search_automatically(fixture_corpus: psycopg.Connection) -> None:
+    conn = fixture_corpus
     text = "Patients must be at least 18 years of age to enroll."
     with conn.cursor() as cur:
         cur.execute(
             _INSERT_TEST_CHUNK,
-            (_TEST_CHUNK_ID, _TEST_NCT_ID, text, Vector([0.1] * 768)),
+            (_TEST_CHUNK_ID, FIXTURE_NCT_ID, text, Vector([0.1] * 768)),
         )
     conn.commit()
 
@@ -63,12 +48,13 @@ def test_insert_populates_text_search_automatically(conn: psycopg.Connection) ->
 
 
 @pytest.mark.db
-def test_dense_query_uses_hnsw_index(conn: psycopg.Connection) -> None:
+def test_dense_query_uses_hnsw_index(fixture_corpus: psycopg.Connection) -> None:
+    conn = fixture_corpus
     filler_text = "filler text for the index-usage check"
     with conn.cursor() as cur:
         cur.execute(
             _INSERT_TEST_CHUNK,
-            (_TEST_CHUNK_ID, _TEST_NCT_ID, filler_text, Vector([0.1] * 768)),
+            (_TEST_CHUNK_ID, FIXTURE_NCT_ID, filler_text, Vector([0.1] * 768)),
         )
     conn.commit()
 
@@ -82,12 +68,12 @@ def test_dense_query_uses_hnsw_index(conn: psycopg.Connection) -> None:
 
 
 @pytest.mark.db
-def test_lexical_query_uses_gin_index(conn: psycopg.Connection) -> None:
+def test_lexical_query_uses_gin_index(fixture_corpus: psycopg.Connection) -> None:
     query = (
         "EXPLAIN SELECT chunk_id FROM chunks "
         "WHERE text_search @@ plainto_tsquery('english', 'eligibility criteria')"
     )
-    with conn.cursor() as cur:
+    with fixture_corpus.cursor() as cur:
         cur.execute(query)
         plan = "\n".join(row[0] for row in cur.fetchall())
     assert "idx_chunks_text_search" in plan

@@ -1,70 +1,36 @@
-from collections.abc import Iterator
-
 import psycopg
 import pytest
-from pgvector.psycopg import register_vector
 
-from protocol_drift.db import DEFAULT_DSN as DSN
 from protocol_drift.retrieval.hybrid import hybrid_search
 from protocol_drift.retrieval.query_parse import QueryFilters
 from protocol_drift.trace.store import TraceStore
-
-KNOWN_CHUNK_ID = "NCT03007407:protocol:19"
-KNOWN_NCT_ID = "NCT03007407"
-OTHER_TRIAL_CHUNK_ID = "NCT03007732:protocol:87"
-
-_TABLES_CHILD_TO_PARENT = ("cost_record", "generation", "chunk_hit", "retrieval_step", "query")
-
-
-def _max_ids(conn: psycopg.Connection) -> dict[str, int]:
-    ids: dict[str, int] = {}
-    with conn.cursor() as cur:
-        for table in _TABLES_CHILD_TO_PARENT:
-            cur.execute(f"SELECT COALESCE(MAX(id), 0) FROM {table}")
-            row = cur.fetchone()
-            ids[table] = row[0] if row else 0
-    return ids
-
-
-@pytest.fixture
-def conn() -> Iterator[psycopg.Connection]:
-    connection = psycopg.connect(DSN)
-    register_vector(connection)
-    before_ids = _max_ids(connection)
-    yield connection
-    connection.rollback()
-    with connection.cursor() as cur:
-        for table in _TABLES_CHILD_TO_PARENT:
-            cur.execute(f"DELETE FROM {table} WHERE id > %s", (before_ids[table],))
-    connection.commit()
-    connection.close()
+from tests.retrieval.conftest import (
+    FIXTURE_NCT_ID,
+    KNOWN_CHUNK_EMBEDDING,
+    KNOWN_CHUNK_ID,
+    OTHER_TRIAL_CHUNK_ID,
+    max_ids,
+)
 
 
 class _FakeEmbedder:
-    """Returns the real stored embedding for KNOWN_CHUNK_ID regardless of
-    input text, so the dense leg of hybrid_search deterministically ranks
-    that chunk first -- avoids needing the real sentence-transformers model
-    just to exercise the fusion plumbing."""
-
-    def __init__(self, conn: psycopg.Connection) -> None:
-        with conn.cursor() as cur:
-            cur.execute("SELECT embedding FROM chunks WHERE chunk_id = %s", (KNOWN_CHUNK_ID,))
-            row = cur.fetchone()
-        assert row is not None
-        self._vector = row[0].to_list()
+    """Always returns KNOWN_CHUNK_EMBEDDING regardless of input text, so the
+    dense leg of hybrid_search deterministically ranks the fixture's known
+    chunk first -- avoids needing the real sentence-transformers model just
+    to exercise the fusion plumbing."""
 
     def encode(self, texts: list[str]) -> list[list[float]]:
-        return [self._vector for _ in texts]
+        return [KNOWN_CHUNK_EMBEDDING for _ in texts]
 
 
 @pytest.mark.db
-def test_hybrid_search_fuses_dense_and_lexical_results(conn: psycopg.Connection) -> None:
-    store = TraceStore(conn)
+def test_hybrid_search_fuses_dense_and_lexical_results(fixture_corpus: psycopg.Connection) -> None:
+    store = TraceStore(fixture_corpus)
     query_id = store.log_query("stereotactic radiation therapy SBRT")
-    embedder = _FakeEmbedder(conn)
+    embedder = _FakeEmbedder()
 
     results = hybrid_search(
-        "stereotactic radiation therapy SBRT", 10, embedder, conn, store, query_id
+        "stereotactic radiation therapy SBRT", 10, embedder, fixture_corpus, store, query_id
     )
 
     # Both legs should surface the known chunk (dense: it IS that chunk's
@@ -76,16 +42,18 @@ def test_hybrid_search_fuses_dense_and_lexical_results(conn: psycopg.Connection)
 
 @pytest.mark.db
 def test_hybrid_search_traces_prefilter_dense_and_bm25_substages(
-    conn: psycopg.Connection,
+    fixture_corpus: psycopg.Connection,
 ) -> None:
-    store = TraceStore(conn)
-    before = _max_ids(conn)
+    store = TraceStore(fixture_corpus)
+    before = max_ids(fixture_corpus)
     query_id = store.log_query("stereotactic radiation therapy SBRT")
-    embedder = _FakeEmbedder(conn)
+    embedder = _FakeEmbedder()
 
-    hybrid_search("stereotactic radiation therapy SBRT", 10, embedder, conn, store, query_id)
+    hybrid_search(
+        "stereotactic radiation therapy SBRT", 10, embedder, fixture_corpus, store, query_id
+    )
 
-    with conn.cursor() as cur:
+    with fixture_corpus.cursor() as cur:
         cur.execute(
             "SELECT stage FROM retrieval_step WHERE query_id = %s AND id > %s ORDER BY id",
             (query_id, before["retrieval_step"]),
@@ -95,66 +63,66 @@ def test_hybrid_search_traces_prefilter_dense_and_bm25_substages(
 
 
 @pytest.mark.db
-def test_hybrid_search_respects_k(conn: psycopg.Connection) -> None:
-    store = TraceStore(conn)
+def test_hybrid_search_respects_k(fixture_corpus: psycopg.Connection) -> None:
+    store = TraceStore(fixture_corpus)
     query_id = store.log_query("cancer treatment patient eligibility")
-    embedder = _FakeEmbedder(conn)
+    embedder = _FakeEmbedder()
 
     results = hybrid_search(
-        "cancer treatment patient eligibility", 3, embedder, conn, store, query_id
+        "cancer treatment patient eligibility", 1, embedder, fixture_corpus, store, query_id
     )
 
-    assert len(results) <= 3
+    assert len(results) <= 1
 
 
 @pytest.mark.db
 def test_hybrid_search_with_nct_id_filter_only_returns_that_trial(
-    conn: psycopg.Connection,
+    fixture_corpus: psycopg.Connection,
 ) -> None:
-    store = TraceStore(conn)
+    store = TraceStore(fixture_corpus)
     query_id = store.log_query("cancer treatment patient eligibility")
-    embedder = _FakeEmbedder(conn)
-    filters = QueryFilters(nct_id=KNOWN_NCT_ID)
+    embedder = _FakeEmbedder()
+    filters = QueryFilters(nct_id=FIXTURE_NCT_ID)
 
     results = hybrid_search(
         "cancer treatment patient eligibility",
         20,
         embedder,
-        conn,
+        fixture_corpus,
         store,
         query_id,
         filters=filters,
     )
 
     assert results  # sanity: the filter didn't eliminate everything
-    with conn.cursor() as cur:
+    with fixture_corpus.cursor() as cur:
         cur.execute("SELECT DISTINCT nct_id FROM chunks WHERE chunk_id = ANY(%s)", (results,))
         nct_ids = {row[0] for row in cur.fetchall()}
-    assert nct_ids == {KNOWN_NCT_ID}
+    assert nct_ids == {FIXTURE_NCT_ID}
     assert OTHER_TRIAL_CHUNK_ID not in results
 
 
 @pytest.mark.db
 def test_hybrid_search_logs_filters_applied_on_prefilter_stage(
-    conn: psycopg.Connection,
+    fixture_corpus: psycopg.Connection,
 ) -> None:
-    store = TraceStore(conn)
-    before = _max_ids(conn)
+    store = TraceStore(fixture_corpus)
+    before = max_ids(fixture_corpus)
     query_id = store.log_query("cancer treatment patient eligibility")
-    embedder = _FakeEmbedder(conn)
-    filters = QueryFilters(nct_id=KNOWN_NCT_ID, doc_type="protocol")
+    embedder = _FakeEmbedder()
+    filters = QueryFilters(nct_id=FIXTURE_NCT_ID, doc_type="protocol")
 
     hybrid_search(
         "cancer treatment patient eligibility",
         5,
         embedder,
-        conn,
+        fixture_corpus,
         store,
         query_id,
         filters=filters,
     )
 
-    with conn.cursor() as cur:
+    with fixture_corpus.cursor() as cur:
         cur.execute(
             "SELECT filters_applied FROM retrieval_step "
             "WHERE query_id = %s AND stage = 'prefilter' AND id > %s",
@@ -162,22 +130,24 @@ def test_hybrid_search_logs_filters_applied_on_prefilter_stage(
         )
         row = cur.fetchone()
     assert row is not None
-    assert f"nct_id={KNOWN_NCT_ID}" in row[0]
+    assert f"nct_id={FIXTURE_NCT_ID}" in row[0]
     assert "doc_type=protocol" in row[0]
 
 
 @pytest.mark.db
 def test_hybrid_search_no_filters_logs_none_on_prefilter_stage(
-    conn: psycopg.Connection,
+    fixture_corpus: psycopg.Connection,
 ) -> None:
-    store = TraceStore(conn)
-    before = _max_ids(conn)
+    store = TraceStore(fixture_corpus)
+    before = max_ids(fixture_corpus)
     query_id = store.log_query("cancer treatment patient eligibility")
-    embedder = _FakeEmbedder(conn)
+    embedder = _FakeEmbedder()
 
-    hybrid_search("cancer treatment patient eligibility", 5, embedder, conn, store, query_id)
+    hybrid_search(
+        "cancer treatment patient eligibility", 5, embedder, fixture_corpus, store, query_id
+    )
 
-    with conn.cursor() as cur:
+    with fixture_corpus.cursor() as cur:
         cur.execute(
             "SELECT filters_applied FROM retrieval_step "
             "WHERE query_id = %s AND stage = 'prefilter' AND id > %s",
