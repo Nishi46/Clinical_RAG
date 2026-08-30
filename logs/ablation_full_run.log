@@ -1,0 +1,8 @@
+Loaded 301 questions (data/eval/t1.jsonl, data/eval/t2.jsonl)
+Loading embedder...
+Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]Loading weights: 100%|██████████| 199/199 [00:00<00:00, 8698.25it/s]
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loading reranker...
+Loading weights:   0%|          | 0/393 [00:00<?, ?it/s]Loading weights: 100%|██████████| 393/393 [00:00<00:00, 8957.22it/s]
+Running 5 rungs over 301 questions (generate_answers=True)...
+Wrote results/ablation.md
