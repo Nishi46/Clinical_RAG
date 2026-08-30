@@ -1,4 +1,4 @@
-.PHONY: lint typecheck test test-db fmt corpus-report ingestion-report ablation
+.PHONY: lint typecheck test test-db fmt corpus-report ingestion-report ablation discrepancy-eval
 
 lint:
 	ruff check .
@@ -24,3 +24,6 @@ ingestion-report:
 
 ablation:
 	python -m protocol_drift.eval.ablation
+
+discrepancy-eval:
+	python -m protocol_drift.eval.discrepancy_scorer
