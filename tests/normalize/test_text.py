@@ -2,6 +2,7 @@ from protocol_drift.normalize.text import (
     contains_as_whole_token,
     extract_durations_in_months,
     normalize_text,
+    strip_durations,
 )
 
 
@@ -37,3 +38,11 @@ def test_extract_durations_in_months_finds_multiple_and_ignores_non_durations() 
 
 def test_extract_durations_in_months_empty_for_no_duration() -> None:
     assert extract_durations_in_months("Bristol-Myers Squibb") == set()
+
+
+def test_strip_durations_removes_duration_mention() -> None:
+    assert strip_durations("Overall survival at 24 months") == "Overall survival at "
+
+
+def test_strip_durations_leaves_text_with_no_duration_unchanged() -> None:
+    assert strip_durations("Overall survival") == "Overall survival"

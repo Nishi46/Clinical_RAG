@@ -71,3 +71,11 @@ def extract_durations_in_months(text: str) -> set[float]:
         unit = match.group(2)
         durations.add(round(value * _DURATION_UNIT_TO_MONTHS[unit], 2))
     return durations
+
+
+def strip_durations(text: str) -> str:
+    """Removes every "<number> <duration-unit>" occurrence from `text`.
+    S4-03's compare_outcomes uses this to check whether two outcome texts
+    differ *only* in how a timeframe is worded: strip each side's duration
+    mention, then compare what's left."""
+    return _DURATION_PATTERN.sub("", text)
