@@ -34,6 +34,7 @@ class QueryFilters:
     nct_id: str | None = None
     doc_type: str | None = None
     doc_version: float | None = None
+    section: str | None = None
 
 
 def parse_query_filters(query_text: str, nct_id: str | None = None) -> QueryFilters:
@@ -60,8 +61,8 @@ def parse_query_filters(query_text: str, nct_id: str | None = None) -> QueryFilt
 def filters_to_where_clause(filters: QueryFilters | None) -> tuple[str, list[Any]]:
     """SQL fragment (starting with " AND ", empty string if no filter is
     set) plus its bind params, for the optional (nct_id, doc_type,
-    doc_version) filters -- shared by dense_search and lexical_search so
-    both apply the identical prefilter semantics."""
+    doc_version, section) filters -- shared by dense_search and
+    lexical_search so both apply the identical prefilter semantics."""
     if filters is None:
         return "", []
     clauses = []
@@ -75,6 +76,9 @@ def filters_to_where_clause(filters: QueryFilters | None) -> tuple[str, list[Any
     if filters.doc_version is not None:
         clauses.append("doc_version = %s")
         params.append(filters.doc_version)
+    if filters.section is not None:
+        clauses.append("section = %s")
+        params.append(filters.section)
     if not clauses:
         return "", []
     return " AND " + " AND ".join(clauses), params

@@ -42,6 +42,7 @@ def _describe_filters(filters: QueryFilters | None) -> str:
         ("nct_id", filters.nct_id),
         ("doc_type", filters.doc_type),
         ("doc_version", filters.doc_version),
+        ("section", filters.section),
     )
     fired = [f"{name}={value}" for name, value in fields if value is not None]
     return ",".join(fired) if fired else "none"

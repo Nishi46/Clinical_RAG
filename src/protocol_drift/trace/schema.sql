@@ -22,7 +22,9 @@ CREATE TABLE IF NOT EXISTS query (
 CREATE TABLE IF NOT EXISTS retrieval_step (
     id SERIAL PRIMARY KEY,
     query_id INTEGER NOT NULL REFERENCES query (id),
-    stage TEXT NOT NULL CHECK (stage IN ('dense', 'bm25', 'rrf', 'prefilter', 'rerank')),
+    stage TEXT NOT NULL CHECK (
+        stage IN ('dense', 'bm25', 'rrf', 'prefilter', 'rerank', 'structured_lookup')
+    ),
     latency_ms DOUBLE PRECISION,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -38,6 +40,17 @@ CREATE INDEX IF NOT EXISTS idx_retrieval_step_query_id ON retrieval_step (query_
 -- against the already-populated dev database is safe, same convention as
 -- db/schema.sql's enrollment_count column.
 ALTER TABLE retrieval_step ADD COLUMN IF NOT EXISTS filters_applied TEXT;
+
+-- S4-04: `answer_cross_source_query`'s registry-side legs (registered_first/
+-- registered_current) are direct Postgres lookups, not a chunk-ranking
+-- retrieval stage -- 'structured_lookup' gives them their own real stage
+-- label rather than misusing one of the chunk-ranking stages above. The
+-- inline CHECK on a fresh database already includes it; DROP+ADD (no
+-- "ADD CONSTRAINT IF NOT EXISTS" exists in Postgres) widens it on an
+-- already-created database, safe to re-run.
+ALTER TABLE retrieval_step DROP CONSTRAINT IF EXISTS retrieval_step_stage_check;
+ALTER TABLE retrieval_step ADD CONSTRAINT retrieval_step_stage_check
+    CHECK (stage IN ('dense', 'bm25', 'rrf', 'prefilter', 'rerank', 'structured_lookup'));
 
 -- One row per chunk returned by a retrieval_step. nct_id/doc_type/section/
 -- page_range are denormalized here (rather than looked up from the corpus
