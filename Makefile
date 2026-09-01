@@ -1,4 +1,4 @@
-.PHONY: lint typecheck test test-db fmt corpus-report ingestion-report ablation discrepancy-eval phrase-pairs normalization-eval discrepancy-detect
+.PHONY: lint typecheck test test-db fmt corpus-report ingestion-report ablation discrepancy-eval phrase-pairs normalization-eval discrepancy-detect t3-questions
 
 lint:
 	ruff check .
@@ -36,3 +36,6 @@ normalization-eval:
 
 discrepancy-detect:
 	python scripts/run_discrepancy_detector.py
+
+t3-questions:
+	python -m protocol_drift.eval.t3_questions
