@@ -1,4 +1,4 @@
-.PHONY: lint typecheck test test-db fmt corpus-report ingestion-report ablation discrepancy-eval phrase-pairs normalization-eval discrepancy-detect t3-questions
+.PHONY: lint typecheck test test-db fmt corpus-report ingestion-report ablation discrepancy-eval phrase-pairs normalization-eval discrepancy-detect t3-questions adjudication-worksheet export-gold-labels
 
 lint:
 	ruff check .
@@ -39,3 +39,9 @@ discrepancy-detect:
 
 t3-questions:
 	python -m protocol_drift.eval.t3_questions
+
+adjudication-worksheet:
+	python scripts/build_adjudication_worksheet.py
+
+export-gold-labels:
+	python scripts/export_gold_labels.py
