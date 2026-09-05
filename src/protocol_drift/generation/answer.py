@@ -35,7 +35,17 @@ __all__ = [
     "build_prompt",
     "cached_generate",
     "generate_answer",
+    "is_refusal",
 ]
+
+
+def is_refusal(response_text: str) -> bool:
+    """Exact match against `REFUSAL_TOKEN` only -- a hedge like "I'm not
+    sure, but possibly X" is not a clean refusal (S4-09's adversarial/
+    refusal-metrics eval and this function share this exact check, so a
+    generated answer counts as refusing the same way everywhere it's
+    checked)."""
+    return response_text.strip() == REFUSAL_TOKEN
 
 
 @dataclass
@@ -137,14 +147,14 @@ def generate_answer(
         prompt, query_id, store, model, digest
     )
 
-    is_refusal = response_text.strip() == REFUSAL_TOKEN
-    cited_chunk_ids = [] if is_refusal else _parse_citations(response_text, retrieved_chunks)
+    refused = is_refusal(response_text)
+    cited_chunk_ids = [] if refused else _parse_citations(response_text, retrieved_chunks)
 
     return GeneratedAnswer(
         query_id=query_id,
         generation_id=generation_id,
         response_text=response_text,
         cited_chunk_ids=cited_chunk_ids,
-        is_refusal=is_refusal,
+        is_refusal=refused,
         from_cache=from_cache,
     )
