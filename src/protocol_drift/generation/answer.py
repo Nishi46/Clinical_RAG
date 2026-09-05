@@ -11,8 +11,9 @@ from __future__ import annotations
 
 import re
 import time
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
+from typing import Any
 
 from protocol_drift.eval.models import EvalQuestion
 from protocol_drift.generation import ollama_client
@@ -35,6 +36,7 @@ __all__ = [
     "build_prompt",
     "cached_generate",
     "generate_answer",
+    "stream_answer",
     "is_refusal",
 ]
 
@@ -158,3 +160,76 @@ def generate_answer(
         is_refusal=refused,
         from_cache=from_cache,
     )
+
+
+def stream_answer(
+    question: EvalQuestion,
+    retrieved_chunks: Sequence[RetrievedChunk],
+    store: TraceStore,
+    model: str = DEFAULT_MODEL_NAME,
+    digest: str = DEFAULT_MODEL_DIGEST,
+    tier: str | None = None,
+    query_id: int | None = None,
+) -> Iterator[dict[str, Any]]:
+    """Streaming sibling of `generate_answer` -- same prompt-building,
+    caching, and trace-logging contract (shares `build_prompt`,
+    `compute_prompt_hash`, `is_refusal`, `_parse_citations` with it, rather
+    than reimplementing them), but yields the response as it arrives from
+    Ollama instead of returning it as one block, for S5-01's SSE endpoint to
+    forward live. Yields `{"type": "token", "text": ...}` per piece of text,
+    then exactly one final `{"type": "done", ...}` carrying the same fields
+    `GeneratedAnswer` does. A cache hit still logs a fresh generation/cost
+    row under this `query_id` (every call stays traced, per `cached_generate`'s
+    contract) but has nothing to stream live, so its full cached text is
+    yielded as a single token event."""
+    prompt = build_prompt(question, retrieved_chunks)
+    if query_id is None:
+        query_id = store.log_query(question.question_text, tier=tier)
+
+    prompt_hash = compute_prompt_hash(digest, prompt)
+    cached = store.find_generation(digest, prompt_hash)
+
+    if cached is not None:
+        response_text = cached["response_text"]
+        yield {"type": "token", "text": response_text}
+        token_count = cached["token_count"]
+        tokens_in = cached["tokens_in"] or 0
+        tokens_out = cached["tokens_out"] or 0
+        latency_ms = 0.0
+        wall_clock_ms = 0.0
+        from_cache = True
+    else:
+        pieces: list[str] = []
+        tokens_in = tokens_out = 0
+        wall_clock_ms = 0.0
+        start = time.monotonic()
+        for event in ollama_client.generate_stream(prompt, model, digest):
+            piece = event.get("response", "")
+            if piece:
+                pieces.append(piece)
+                yield {"type": "token", "text": piece}
+            if event.get("done"):
+                tokens_in = event.get("prompt_eval_count", 0)
+                tokens_out = event.get("eval_count", 0)
+                wall_clock_ms = event.get("total_duration", 0) / 1e6  # ns -> ms
+        latency_ms = (time.monotonic() - start) * 1000
+        response_text = "".join(pieces)
+        token_count = tokens_in + tokens_out
+        from_cache = False
+
+    generation_id = store.log_generation(
+        query_id, digest, prompt_hash, response_text, latency_ms, token_count
+    )
+    store.log_cost(generation_id, tokens_in, tokens_out, wall_clock_ms)
+
+    refused = is_refusal(response_text)
+    cited_chunk_ids = [] if refused else _parse_citations(response_text, retrieved_chunks)
+
+    yield {
+        "type": "done",
+        "query_id": query_id,
+        "generation_id": generation_id,
+        "cited_chunk_ids": cited_chunk_ids,
+        "is_refusal": refused,
+        "from_cache": from_cache,
+    }

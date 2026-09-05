@@ -46,8 +46,9 @@ jobs:
         # it. `retrieval` is included too so the full local dev surface is
         # importable in CI, even though no test currently constructs a real
         # SentenceTransformer/CrossEncoder (all retrieval/rerank tests mock
-        # the embedder/reranker).
-        run: pip install -e ".[dev,retrieval,eval]"
+        # the embedder/reranker). `serving` is required the same way `eval`
+        # is: tests/serving/test_app.py imports fastapi at module level.
+        run: pip install -e ".[dev,retrieval,eval,serving]"
 
       - name: Set up database schema
         run: |

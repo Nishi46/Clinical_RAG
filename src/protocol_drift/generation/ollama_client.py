@@ -11,6 +11,8 @@ mode the appendix's "pin by digest, not tag" guarantee exists to catch.
 
 from __future__ import annotations
 
+import json
+from collections.abc import Iterator
 from typing import Any
 
 import requests
@@ -70,3 +72,31 @@ def generate(
     )
     response.raise_for_status()
     return dict(response.json())
+
+
+def generate_stream(
+    prompt: str,
+    model: str,
+    digest: str,
+    base_url: str = DEFAULT_BASE_URL,
+    timeout_s: int = DEFAULT_TIMEOUT_S,
+) -> Iterator[dict[str, Any]]:
+    """Streaming sibling of `generate` -- same digest verification, but calls
+    `/api/generate` with `stream=True` and yields each newline-delimited JSON
+    chunk as Ollama emits it. The final chunk carries `done: True` plus the
+    same `eval_count`/`prompt_eval_count`/`total_duration` fields `generate`'s
+    single response does, so callers accumulate identical cost data whether
+    they stream or not. Kept alongside `generate` rather than replacing it --
+    S3-06's cached non-streaming eval-harness path still depends on that one."""
+    verify_digest(model, digest, base_url)
+    with requests.post(
+        f"{base_url}/api/generate",
+        json={"model": model, "prompt": prompt, "stream": True},
+        timeout=timeout_s,
+        stream=True,
+    ) as response:
+        response.raise_for_status()
+        for line in response.iter_lines():
+            if not line:
+                continue
+            yield json.loads(line)
